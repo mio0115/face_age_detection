@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from utils.bbox_utils import from_cxcyhw_to_xyxy, smooth_l1_dist, get_iou
+from utils.bbox_utils import from_cxcyhw_to_xyxy, smooth_l1_dist, get_iou, complete_iou
 
 
 @tf.function
@@ -12,6 +12,17 @@ def boxes_loss(tgt_boxes, pred_boxes, alpha=0.3, beta=0.3):
     iou_loss = 1. - get_iou(pred_xyxy, tgt_boxes)
 
     return tf.reduce_mean(alpha * l1_loss + beta * iou_loss + (1-alpha-beta) * invalid_hw)
+
+@tf.function
+def boxes_loss_v2(tgt_boxes, pred_boxes, alpha=0.5):
+    pred_xyxy = from_cxcyhw_to_xyxy(pred_boxes)
+
+    idx = tf.range(0, tf.shape(pred_boxes)[0])
+    l1_loss = tf.gather(smooth_l1_dist(pred_xyxy, tgt_boxes), idx, batch_dims=1) # take diagonal
+
+    iou_loss = 1 - complete_iou(pred_xyxy, tgt_boxes)
+
+    return tf.reduce_mean(alpha * l1_loss + (1 - alpha) * iou_loss)
 
 @tf.function
 def _penalty_of_weight_height(bbox, limit=1.):

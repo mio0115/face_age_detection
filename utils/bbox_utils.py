@@ -22,6 +22,23 @@ def from_cxcyhw_to_xyxy(bbox_coord: tf.Tensor) -> tf.Tensor:
     return new_bbox_coord
 
 @tf.function
+def from_xyxy_to_cxcyhw(bbox_coord: tf.Tensor):
+    """ Transform the bbox coordinates
+        from (min_x, min_y, max_x, max_y)
+        to
+        (center_x, center_y, height, width)"""
+    
+    new_bbox_coord = tf.stack(
+        [(bbox_coord[..., 0] + bbox_coord[..., 2])/2,
+         (bbox_coord[..., 1] + bbox_coord[..., 3])/2,
+         bbox_coord[..., 3] - bbox_coord[..., 1],
+         bbox_coord[..., 2] - bbox_coord[..., 0]],
+         axis=-1
+    )
+
+    return new_bbox_coord
+
+@tf.function
 def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float=1.0):
     # bbox     shape = (batch_size*seq_len, 4)
     # tgt_bbox shape = (batch_size, 4)
@@ -30,12 +47,15 @@ def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float=1.0):
     bbox = tf.broadcast_to(bbox[:, tf.newaxis, :], shape=(seq_len, tgt_len, 4))
     dist = tf.reduce_sum(bbox - tgt_bbox, axis=-1)
 
-    loss = tf.where(tf.less(dist, delta), 0.5*tf.square(dist), tf.abs(dist)-0.5)
-    
+    loss = tf.where(tf.less(dist, delta), 0.5*tf.square(dist)/delta, tf.abs(dist)-delta*0.5)
+
     return loss
 
 @tf.function
 def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
+    # The form of input coordinate is (left, upper, right, bottom)
+    # Note that the zero point of an image is the left-upper corner
+
     seq_len, tgt_len = tf.shape(bbox)[0], tf.shape(tgt_bbox)[0]
     ext_bbox = tf.broadcast_to(bbox[:, tf.newaxis, :], shape=(seq_len, tgt_len, 4))
 
@@ -75,23 +95,34 @@ def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
 
 @tf.function
 def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
-    bbox_cxcyhw = bbox
-    bbox_xyxy = from_cxcyhw_to_xyxy(bbox_cxcyhw)
+    # Assume the form of bbox and tgt_bbox are both xyxy
 
-    iou = get_iou(bbox_xyxy, tgt_bbox)
+    tgt_len = tf.shape(tgt_bbox)[0]
     
-    bbox_cx, bbox_cy = bbox_cxcyhw[..., 0], bbox_cxcyhw[..., 1]
+    bbox_cxcyhw = from_xyxy_to_cxcyhw(bbox)
+    tgt_cxcyhw = from_xyxy_to_cxcyhw(tgt_bbox)
 
-    tgt_cx, tgt_cy = (tgt_bbox[..., 0] + tgt_bbox[..., 2]) / 2, (tgt_bbox[..., 1] + tgt_bbox[..., 3]) / 2
-    tgt_h, tgt_w = tgt_bbox[..., 3] - tgt_bbox[..., 1], tgt_bbox[..., 2] - tgt_bbox[..., 0]
+    iou = tf.gather(get_iou(bbox, tgt_bbox), tf.range(0, tgt_len), batch_dims=1)
 
-    # distance between two center of boxes over length of the diagonal of the minimum box that cover tgt_bbox and bbox
-    dist = (tf.pow(tgt_cx - bbox_cx, 2) + \
-            tf.pow(tgt_cy - bbox_cy, 2)) / \
-        (tf.pow(tgt_bbox[..., 2] - bbox_xyxy[..., 0], 2) + \
-         tf.pow(tgt_bbox[..., 3] - bbox_xyxy[..., 1], 2))
+    # normalized distance between two boxes' center
+    # normalized by the length of the diagonal of the minimum box that cover tgt_bbox and bbox
+    #dist = tf.reduce_sum(tf.pow(tf.gather(tgt_cxcyhw - bbox_cxcyhw, [0, 1], axis=-1), 2), axis=-1) / tf.reduce_sum(tf.pow(big_box_max - big_box_min, 2), -1)
+    center_diff = tgt_cxcyhw[..., :2] - bbox_cxcyhw[..., :2]
+    sq_center_dist = tf.reduce_sum(tf.square(center_diff), axis=-1)
     
-    aspect_ratio = 4 / tf.pow(math.pi, 2) * tf.pow(tf.tanh(tgt_w / tgt_h) - tf.tanh(bbox_cxcyhw[..., 3] / bbox_cxcyhw[..., 2]), 2)
-    alpha = tf.where(tf.less(iou, 0.5), 0., aspect_ratio / (1 - iou + aspect_ratio))
+    big_box_cand = tf.stack([tgt_bbox, bbox], axis=-1)
+    big_box_min = tf.reduce_min(tf.gather(big_box_cand, [0, 1], axis=1), axis=-1)
+    big_box_max = tf.reduce_max(tf.gather(big_box_cand, [2, 3], axis=1), axis=-1)
+    big_box_diag_sq_len = tf.reduce_sum(tf.square(big_box_max - big_box_min), axis=-1)
+    
+    norm_dist = sq_center_dist / big_box_diag_sq_len
 
-    return iou - dist - alpha * aspect_ratio
+    # Aspect Ratio computes as width / height
+    tgt_aspect_ratio = tf.tanh(tgt_cxcyhw[..., 3] / tgt_cxcyhw[..., 2])
+    bbox_aspect_ratio = tf.tanh(bbox_cxcyhw[..., 3] / bbox_cxcyhw[..., 2])
+    sq_aspect_ratio_diff = tf.square(tgt_aspect_ratio - bbox_aspect_ratio)
+    
+    aspect_ratio = 4.0 / tf.pow(math.pi, 2) * sq_aspect_ratio_diff
+    alpha = tf.where(tf.less(iou, 0.5), 0.0, aspect_ratio / (1 - iou + aspect_ratio))
+
+    return (1 - iou) + norm_dist + alpha * aspect_ratio

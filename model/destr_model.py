@@ -7,7 +7,7 @@ from blocks.mini_detector import MiniDetector
 from blocks.decoder_block import DecoderBlock
 from utils.hungarian_algorithm import SingleTargetMatcher
 from utils.positional_encoding import positional_encoding_sin_2d, gen_sineembed_for_position
-from loss_functions.boxes_loss_functions import boxes_loss
+from loss_functions.boxes_loss_functions import boxes_loss_v2
 from loss_functions.class_loss_functions import cls_loss
 
 
@@ -142,17 +142,14 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
             {'pred_obj_cls': mini_det_output[..., :num_cls], 'pred_boxes': mini_det_output[..., num_cls:]}, 
             tgt_labels=tf.cast(tgt_labels, dtype=tf.int32), tgt_bbox=tgt_boxes
         )
-
-        #tf.print(f"match_idx: {matched_idx}")
         
         matched_cls = tf.gather(mini_det_output[..., :num_cls], matched_idx, batch_dims=1)
         matched_cls = tf.reshape(matched_cls, shape=(-1, num_cls))
         matched_bbox = tf.gather(mini_det_output[..., num_cls:], matched_idx, batch_dims=1)
         matched_bbox = tf.reshape(matched_bbox, shape=(-1, 4))
 
-        mini_det_loss = 0.5*cls_loss(tgt_oh_labels, matched_cls) + 0.5*boxes_loss(tgt_boxes, matched_bbox)
-        #tf.print(f"mini_det_cls_loss: {cls_loss(tgt_oh_labels, matched_cls)}")
-        model_loss = 0.5*cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5*boxes_loss(tgt_boxes, pred_boxes_flat)
+        mini_det_loss = 0.5*cls_loss(tgt_oh_labels, matched_cls) + 0.5*boxes_loss_v2(tgt_boxes, matched_bbox)
+        model_loss = 0.5*cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5*boxes_loss_v2(tgt_boxes, pred_boxes_flat)
     
     gradients_destr = tape.gradient(model_loss, model.trainable_variables)
     gradients_destr = [grad if grad is not None else tf.zeros_like(var) for grad, var in zip(gradients_destr, model.trainable_variables)]
