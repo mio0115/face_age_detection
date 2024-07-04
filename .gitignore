@@ -1,0 +1,7 @@
+./.dockerignore
+.tf_test.ipynb
+
+./*/__pycache__
+./*/__pycache__/*
+
+./.build
