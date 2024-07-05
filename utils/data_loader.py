@@ -52,7 +52,7 @@ def parse(proto, ft_desc):
     return image, coord, label, oh_label
 
 def load_data_tfrecord(path_to_tfrecord='/media/daniel/DatasetIMDB/imdb_chunks', 
-                       class_num: int = 8, batch_size: int = 8):
+                       class_num: int = 8):
     tfrecord_files = [os.path.join(path_to_tfrecord, f) for f in os.listdir(path_to_tfrecord) if f.endswith('.tfrecord')]
 
     feature_description = {
@@ -65,10 +65,7 @@ def load_data_tfrecord(path_to_tfrecord='/media/daniel/DatasetIMDB/imdb_chunks',
 
     raw_dataset = tf.data.TFRecordDataset(tfrecord_files)
     parsed_dataset = raw_dataset.map(parse_fn)
-    parsed_dataset = parsed_dataset.shuffle(buffer_size=10000)
     
-    parsed_dataset = parsed_dataset.batch(batch_size, drop_remainder=True)
-
     return parsed_dataset
     
 def to_dict_target(targets: tf.Tensor):

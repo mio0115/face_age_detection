@@ -104,25 +104,36 @@ def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
 
     iou = tf.gather(get_iou(bbox, tgt_bbox), tf.range(0, tgt_len), batch_dims=1)
 
+    #print(f'bbox_cxcyhw: {bbox_cxcyhw}')
+    #print(f'tgt_cxcyhw : {tgt_cxcyhw}')
+    #print(f'iou: {iou}')
+
     # normalized distance between two boxes' center
     # normalized by the length of the diagonal of the minimum box that cover tgt_bbox and bbox
     #dist = tf.reduce_sum(tf.pow(tf.gather(tgt_cxcyhw - bbox_cxcyhw, [0, 1], axis=-1), 2), axis=-1) / tf.reduce_sum(tf.pow(big_box_max - big_box_min, 2), -1)
     center_diff = tgt_cxcyhw[..., :2] - bbox_cxcyhw[..., :2]
+    #print(f'center_diff: {center_diff}')
     sq_center_dist = tf.reduce_sum(tf.square(center_diff), axis=-1)
+    #print(f'sq_center_dist: {sq_center_dist}')
     
     big_box_cand = tf.stack([tgt_bbox, bbox], axis=-1)
+    #print(f'big_box_cand: {big_box_cand}')
     big_box_min = tf.reduce_min(tf.gather(big_box_cand, [0, 1], axis=1), axis=-1)
+    #print(f'big_box_min: {big_box_min}')
     big_box_max = tf.reduce_max(tf.gather(big_box_cand, [2, 3], axis=1), axis=-1)
+    #print(f'big_box_max: {big_box_max}')
     big_box_diag_sq_len = tf.reduce_sum(tf.square(big_box_max - big_box_min), axis=-1)
+    #print(f'big_box_diag_sq_len: {big_box_diag_sq_len}')
     
     norm_dist = sq_center_dist / big_box_diag_sq_len
+    #print(f'norm_dist: {norm_dist}')
 
     # Aspect Ratio computes as width / height
     tgt_aspect_ratio = tf.tanh(tgt_cxcyhw[..., 3] / tgt_cxcyhw[..., 2])
-    bbox_aspect_ratio = tf.tanh(bbox_cxcyhw[..., 3] / bbox_cxcyhw[..., 2])
+    bbox_aspect_ratio = tf.tanh(bbox_cxcyhw[..., 3] / tf.maximum(bbox_cxcyhw[..., 2], 1e-6))
     sq_aspect_ratio_diff = tf.square(tgt_aspect_ratio - bbox_aspect_ratio)
     
-    aspect_ratio = 4.0 / tf.pow(math.pi, 2) * sq_aspect_ratio_diff
+    aspect_ratio = 4.0 / tf.square(math.pi) * sq_aspect_ratio_diff
     alpha = tf.where(tf.less(iou, 0.5), 0.0, aspect_ratio / (1 - iou + aspect_ratio))
 
-    return (1 - iou) + norm_dist + alpha * aspect_ratio
+    return iou - norm_dist - alpha * aspect_ratio

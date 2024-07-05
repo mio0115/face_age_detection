@@ -13,5 +13,8 @@ __pycache__/
 .build/
 *.hash
 
-#Ignore cv_project which is the developing virtual environment
+# Ignore cv_project which is the developing virtual environment
 cv_project/
+
+# Ignore README.md
+README.md
