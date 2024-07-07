@@ -44,15 +44,15 @@ class EncoderBlock(tf.keras.layers.Layer):
 
         # shape = (height, width, embedding_dim)
         self._input_shape = input_shape
-        
+
     @property
     def input_shape(self):
         return self._input_shape
-    
+
     def call(self, inputs):
         batch_size = tf.shape(inputs)[0]
         x = inputs
-        
+
         tmp_x = x
         x = self.self_attention_layer(x)
         x = self.dropout1(x)
@@ -68,5 +68,12 @@ class EncoderBlock(tf.keras.layers.Layer):
 
 
 if __name__ == "__main__":
-    eb = EncoderBlock(input_shape=(7, 7, 512), heads_num=8, d_k=256, d_v=512, block_idx=1, positional_encoding=tf.random.normal(shape=(7, 7, 512)))
-    print(eb(tf.random.uniform(shape=(2, 7, 7, 512), maxval=255.)))
+    eb = EncoderBlock(
+        input_shape=(7, 7, 512),
+        heads_num=8,
+        d_k=256,
+        d_v=512,
+        block_idx=1,
+        positional_encoding=tf.random.normal(shape=(7, 7, 512)),
+    )
+    print(eb(tf.random.uniform(shape=(2, 7, 7, 512), maxval=255.0)))

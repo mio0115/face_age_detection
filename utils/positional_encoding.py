@@ -24,10 +24,11 @@ def positional_encoding_sin_2d(height, width, channels):
 
     pos_encoding = np.zeros((height, width, channels))
 
-    pos_encoding[..., : channels//2] = height_encoding[:, np.newaxis, :]
-    pos_encoding[..., channels//2 :] = width_encoding[np.newaxis, ...]
+    pos_encoding[..., : channels // 2] = height_encoding[:, np.newaxis, :]
+    pos_encoding[..., channels // 2 :] = width_encoding[np.newaxis, ...]
 
     return tf.constant(pos_encoding, dtype=tf.float32)
+
 
 def gen_sineembed_for_position(pos_tensor, d_model):
     scale = 2 * math.pi
@@ -37,10 +38,10 @@ def gen_sineembed_for_position(pos_tensor, d_model):
 
     x_embed = pos_tensor[..., 0] * scale
     y_embed = pos_tensor[..., 1] * scale
-    
+
     pos_x = x_embed[..., tf.newaxis] / dim_t
     pos_y = y_embed[..., tf.newaxis] / dim_t
-    
+
     pos_x = tf.concat([tf.sin(pos_x[..., 0::2]), tf.cos(pos_x[..., 1::2])], axis=-1)
     pos_y = tf.concat([tf.sin(pos_y[..., 0::2]), tf.cos(pos_y[..., 1::2])], axis=-1)
     pos = tf.concat([pos_x, pos_y], axis=2)

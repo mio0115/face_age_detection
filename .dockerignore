@@ -1,17 +1,13 @@
-./Dockerfile
+Dockerfile
+
+# Ignore the gitignore
+.gitignore
 
 # Ignore the script files
-./build_and_run.sh
-./copy_to_volume.sh
+*.sh
 
 # Ignore Python bytecode files
 __pycache__/
-*.pyc
-*.pyo
-
-# Ignore .build and hash files
-.build/
-*.hash
 
 # Ignore cv_project which is the developing virtual environment
 cv_project/

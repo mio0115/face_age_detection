@@ -1,7 +1,5 @@
-./.dockerignore
-.tf_test.ipynb
+.dockerignore
+tf_test.ipynb
 
-./*/__pycache__
-./*/__pycache__/*
-
-./.build/*
+# Ignore pycache of all packages
+__pycache__/

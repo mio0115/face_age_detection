@@ -33,15 +33,15 @@ class SelfAttention(tf.keras.layers.Layer):
     @property
     def input_shape(self):
         return self._input_shape
-    
+
     @property
     def input_height(self):
         return self._input_shape[0]
-    
+
     @property
     def input_width(self):
         return self._input_shape[1]
-    
+
     @property
     def sequence_length(self):
         return self._input_shape[0]
@@ -53,7 +53,7 @@ class SelfAttention(tf.keras.layers.Layer):
     @property
     def heads_num(self):
         return self._heads_num
-    
+
     @property
     def per_head_dim(self):
         return self.input_shape[-1] // self.heads_num
@@ -73,7 +73,9 @@ class SelfAttention(tf.keras.layers.Layer):
         if obj_pos_encoding is not None:
             x_to_query_key = inputs + obj_pos_encoding
         else:
-            x_to_query_key = inputs + gen_sineembed_for_position(inputs, d_model=self.input_shape[-1])
+            x_to_query_key = inputs + gen_sineembed_for_position(
+                inputs, d_model=self.input_shape[-1]
+            )
         x_to_value = inputs
 
         # reshape inputs into (batch_size, heads_num, seq_len, head_embedding_dim)
@@ -87,17 +89,20 @@ class SelfAttention(tf.keras.layers.Layer):
         k = self._proj_to_key(x_to_query_key)
         # shape = (batch_size, heads_num, seq_len, d_v)
         v = self._proj_to_value(x_to_value)
-        
+
         # shape = (batch_size, heads_num, seq_len, seq_len)
-        a_sc = tf.matmul(q, tf.transpose(k, perm=[0, 1, 3, 2])) / tf.sqrt(tf.cast(self._d_k, dtype=tf.float32))
+        a_sc = tf.matmul(q, tf.transpose(k, perm=[0, 1, 3, 2])) / tf.sqrt(
+            tf.cast(self._d_k, dtype=tf.float32)
+        )
         a_sc = tf.keras.activations.softmax(a_sc)
         output = tf.matmul(a_sc, v)
 
         # we need to then concatenate the output of all the result from matmul(a_sc, v)
         # the shape would be (batch_size, seq_len, output_embedding_dim)
         output = tf.transpose(output, perm=[0, 2, 1, 3])
-        output = tf.reshape(output, shape=(batch_size, self.sequence_length, self.heads_num*self._d_v))
+        output = tf.reshape(
+            output, shape=(batch_size, self.sequence_length, self.heads_num * self._d_v)
+        )
         output = self._proj_to_output(output)
-        
+
         return output
-    

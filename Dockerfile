@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest-gpu-jupyter AS base
+FROM tensorflow/tensorflow:latest-gpu-jupyter
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -6,10 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists
 
 RUN pip install --upgrade pip
-RUN pip install numpy pandas matplotlib scikit-learn jupyterlab opencv-python-headless
-
-
-FROM base
+RUN pip install numpy matplotlib jupyterlab opencv-python-headless
 
 RUN mkdir /workspace
 WORKDIR /workspace
