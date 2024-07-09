@@ -1,5 +1,0 @@
-.dockerignore
-tf_test.ipynb
-
-# Ignore pycache of all packages
-__pycache__/
