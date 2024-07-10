@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest-gpu-jupyter
+FROM tensorflow/tensorflow:2.16.1-gpu
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -9,12 +9,11 @@ RUN mkdir /workspace
 WORKDIR /workspace
 
 COPY requirements.txt .
+COPY scripts/train.sh .
 
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8888
-
-CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
+CMD ["bash", "train.sh"]

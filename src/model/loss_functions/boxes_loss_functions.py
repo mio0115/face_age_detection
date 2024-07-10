@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from ..utils.bbox_utils import (
+from ...utils.bbox_utils import (
     from_cxcyhw_to_xyxy,
     smooth_l1_dist,
     get_iou,

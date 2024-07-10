@@ -71,7 +71,7 @@ def load_data_tfrecord(
         "oh_label": tf.io.FixedLenFeature([class_num], tf.float32),
         "coord": tf.io.FixedLenFeature([4], tf.float32),  # min_x, max_x, min_y, max_y
     }
-    parse_fn = partial(parse, ft_desc=feature_description)
+    parse_fn = partial(_parse, ft_desc=feature_description)
 
     raw_dataset = tf.data.TFRecordDataset(tfrecord_files)
     parsed_dataset = raw_dataset.map(parse_fn)

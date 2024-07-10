@@ -4,7 +4,7 @@ from tensorflow.keras.layers import LayerNormalization, Dense, Dropout
 from ..attention.self_attention import SelfAttention
 from ..attention.pair_self_attention import PairSelfAttention
 from ..attention.split_cross_attention import CrossAttention
-from ..utils.positional_encoding import gen_sineembed_for_position
+from ...utils.positional_encoding import gen_sineembed_for_position
 
 
 class DecoderBlock(tf.keras.layers.Layer):

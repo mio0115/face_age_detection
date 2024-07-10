@@ -1,0 +1,371 @@
+import tensorflow as tf
+import json
+import gc
+import argparse
+
+from ..model.destr_model import build_model
+from ..model.loss_functions.class_loss_functions import cls_loss
+from ..model.loss_functions.boxes_loss_functions import boxes_loss_v2
+from ..utils.data_loader import load_data_tfrecord
+from ..utils.hungarian_algorithm import SingleTargetMatcher
+from ..utils.padding import padding_oh_labels
+from .validate import validate
+
+
+def train_model(
+    learning_rate,
+    batch_size,
+    num_epochs,
+    num_train_samples,
+    num_valid_samples,
+    shuffle_buffer,
+    to_checkpoint_dir,
+    to_dataset,
+    to_loss_records,
+    num_class,
+    input_shape,
+    load_from_ckpt,
+    num_encoder_blocks,
+    num_decoder_blocks,
+    top_k,
+):
+    model = build_model(
+        input_shape=input_shape,
+        num_cls=num_class,
+        num_encoder_blocks=num_encoder_blocks,
+        num_decoder_blocks=num_decoder_blocks,
+        top_k=top_k,
+    )
+
+    checkpoint = tf.train.Checkpoint(model=model)
+    checkpoint_manager = tf.train.CheckpointManager(
+        checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=1
+    )
+
+    if load_from_ckpt:
+        status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
+
+    loss_history = {"train_loss": (0, 0), "valid_loss": (0, 0)}
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    full_dataset = load_data_tfrecord(path_to_tfrecord=to_dataset)
+
+    train_progress_bar = tf.keras.utils.Progbar(num_train_samples)
+    valid_progress_bar = tf.keras.utils.Progbar(num_valid_samples)
+
+    for epoch_idx in range(num_epochs):
+        dataset = full_dataset.shuffle(buffer_size=shuffle_buffer).batch(
+            batch_size=batch_size, drop_remainder=True
+        )
+
+        train_dataset = dataset.take(count=num_train_samples).prefetch(
+            buffer_size=tf.data.AUTOTUNE
+        )
+        valid_dataset = dataset.skip(count=num_train_samples).prefetch(
+            buffer_size=tf.data.AUTOTUNE
+        )
+
+        total_md_loss, total_loss, step = 0, 0, 0
+        for batch in train_dataset:
+            logits, coord, label, oh_label = batch
+
+            mini_det_loss, model_loss = train_one_step(
+                model,
+                optimizer,
+                tf.reshape(
+                    tf.cast(tf.io.decode_raw(logits, tf.uint8), tf.float32),
+                    shape=(-1,) + input_shape,
+                ),
+                tf.concat([label[..., tf.newaxis], oh_label, coord], axis=-1),
+            )
+            total_md_loss += mini_det_loss.numpy()
+            total_loss += model_loss.numpy()
+
+            step += 1
+            train_progress_bar.update(step)
+            if step == num_train_samples:
+                avg_mini_det_loss = total_md_loss / num_train_samples
+                avg_model_loss = total_loss / num_train_samples
+                break
+        loss_history["train_loss"] = (avg_mini_det_loss, avg_model_loss)
+
+        del dataset, train_dataset
+        gc.collect()
+
+        total_md_loss, total_loss, step = 0, 0, 0
+        for batch in valid_dataset:
+            logits, coord, label, oh_label = batch
+
+            mini_det_loss, model_loss = validate(
+                model,
+                tf.reshape(
+                    tf.cast(tf.io.decode_raw(logits, tf.uint8), tf.float32),
+                    shape=(-1,) + input_shape,
+                ),
+                tf.concat([label[..., tf.newaxis], oh_label, coord], axis=-1),
+            )
+            total_md_loss += mini_det_loss.numpy()
+            total_loss += model_loss.numpy()
+
+            step += 1
+            valid_progress_bar.update(step)
+            if step == num_valid_samples:
+                avg_mini_det_loss = total_md_loss / num_valid_samples
+                avg_model_loss = total_loss / num_valid_samples
+                break
+        loss_history["valid_loss"] = (avg_mini_det_loss, avg_model_loss)
+
+        # Save parameters after each epoch
+        checkpoint_manager.save()
+
+        del valid_dataset
+        tf.keras.backend.clear_session()
+        gc.collect()
+
+        print(
+            f"""epoch {epoch_idx+1:>2}: \n
+            \t train_loss: {loss_history["train_loss"][0]:.4f} {loss_history["train_loss"][1]:.4f},
+            \t valid loss: {loss_history["valid_loss"][0]:.4f} {loss_history["valid_loss"][1]:.4f}"""
+        )
+        with open(to_loss_records, mode="w") as fout:
+            print(
+                f"""epoch {epoch_idx+1:>2}: \n
+            \t train_loss: {loss_history["train_loss"][0]:.4f} {loss_history["train_loss"][1]:.4f},
+            \t valid loss: {loss_history["valid_loss"][0]:.4f} {loss_history["valid_loss"][1]:.4f}""",
+                file=fout,
+            )
+
+    return model
+
+
+@tf.function
+def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
+    single_tgt_matcher = SingleTargetMatcher(num_class=num_cls)
+
+    tf.debugging.assert_rank(images, 4, name="check_rank_of_input_images")
+
+    with tf.GradientTape(persistent=True) as tape:
+        pred_cls, pred_boxes, mini_det_output = model(images)
+
+        pred_cls_flat = tf.reshape(pred_cls, shape=(-1, num_cls))
+        pred_boxes_flat = tf.reshape(pred_boxes, shape=(-1, 4))  # cxcy
+
+        tgt_labels = tf.gather(targets, [0], axis=-1)
+        tgt_oh_labels = tf.gather(targets, [1, 2, 3, 4, 5, 6, 7, 8], axis=-1)
+        tgt_boxes = (
+            tf.gather(targets, [9, 11, 10, 12], axis=-1) / 224.0
+        )  # to min_x, min_y, max_x, max_y
+
+        matched_idx = single_tgt_matcher(
+            {
+                "pred_obj_cls": mini_det_output[..., :num_cls],
+                "pred_boxes": mini_det_output[..., num_cls:],
+            },
+            tgt_labels=tf.cast(tgt_labels, dtype=tf.int32),
+            tgt_bbox=tgt_boxes,
+        )
+
+        matched_cls = tf.gather(
+            mini_det_output[..., :num_cls], matched_idx, batch_dims=1
+        )
+        matched_cls = tf.reshape(matched_cls, shape=(-1, num_cls))
+        matched_bbox = tf.gather(
+            mini_det_output[..., num_cls:], matched_idx, batch_dims=1
+        )
+        matched_bbox = tf.reshape(matched_bbox, shape=(-1, 4))
+
+        mini_det_loss = 0.5 * cls_loss(
+            tgt_oh_labels, matched_cls
+        ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox)
+        model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
+            tgt_boxes, pred_boxes_flat
+        )
+
+    gradients_destr = tape.gradient(
+        model_loss,
+        model.trainable_variables,
+    )
+    gradients_destr = [
+        grad if grad is not None else tf.zeros_like(var)
+        for grad, var in zip(gradients_destr, model.trainable_variables)
+    ]
+    clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_destr]
+    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+
+    # mini_det_vars = model.get_layer(name='obj_det_split_transformer')._mini_detector.trainable_variables
+    gradients_mini_det = tape.gradient(
+        mini_det_loss,
+        model.trainable_variables,
+    )
+    gradients_mini_det = [
+        grad if grad is not None else tf.zeros_like(var)
+        for grad, var in zip(gradients_mini_det, model.trainable_variables)
+    ]
+    clipped_gradients = [
+        tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_mini_det
+    ]
+    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+
+    del tape
+
+    return mini_det_loss, model_loss
+
+
+@tf.function
+def train_one_stepV2(
+    model,
+    optimizer,
+    images,
+    targets: tf.RaggedTensor,
+    num_cls: int = 9,
+    padding_to_k: int = 5,
+    batch_size: int = 8,
+):
+    """Suppose that there are multiple objects in an image."""
+    single_tgt_matcher = SingleTargetMatcher(num_class=num_cls)
+
+    tf.debugging.assert_rank(images, 4, name="check_rank_of_input_images")
+
+    with tf.GradientTape(persistent=True) as tape:
+        pred_cls, pred_boxes, mini_det_output = model(images)
+
+        pred_cls_flat = tf.reshape(pred_cls, shape=(-1, num_cls))
+        pred_boxes_flat = tf.reshape(pred_boxes, shape=(-1, 4))  # cxcy
+
+        tgt_labels = tf.gather(targets, [0], axis=-1).to_tensor(
+            default_value=num_cls - 1, shape=(batch_size, padding_to_k, 1)
+        )
+        tgt_oh_labels = tf.gather(targets, [1, 2, 3, 4, 5, 6, 7, 8], axis=-1).to_tensor(
+            default_value=0.0, shape=(batch_size, padding_to_k, num_cls - 1)
+        )  # a class is for empty object
+        tgt_oh_labels = padding_oh_labels(tgt_oh_labels)
+        tgt_boxes = (
+            tf.gather(targets, [9, 11, 10, 12], axis=-1).to_tensor(
+                default_value=0.0, shape=(batch_size, padding_to_k, 4)
+            )
+            / 224.0
+        )  # to min_x, min_y, max_x, max_y
+
+        matched_idx = single_tgt_matcher(
+            {
+                "pred_obj_cls": mini_det_output[..., :num_cls],
+                "pred_boxes": mini_det_output[..., num_cls:],
+            },
+            tgt_labels=tf.cast(tgt_labels, dtype=tf.int32),
+            tgt_bbox=tgt_boxes,
+        )
+
+        matched_cls = tf.gather(
+            mini_det_output[..., :num_cls], matched_idx, batch_dims=1
+        )
+        matched_cls = tf.reshape(matched_cls, shape=(-1, num_cls))
+        matched_bbox = tf.gather(
+            mini_det_output[..., num_cls:], matched_idx, batch_dims=1
+        )
+        matched_bbox = tf.reshape(matched_bbox, shape=(-1, 4))
+
+        mini_det_loss = 0.5 * cls_loss(
+            tgt_oh_labels, matched_cls
+        ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox)
+        model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
+            tgt_boxes, pred_boxes_flat
+        )
+
+    gradients_destr = tape.gradient(model_loss, model.trainable_variables)
+    gradients_destr = [
+        grad if grad is not None else tf.zeros_like(var)
+        for grad, var in zip(gradients_destr, model.trainable_variables)
+    ]
+    clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_destr]
+    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+
+    # mini_det_vars = model.get_layer(name='obj_det_split_transformer')._mini_detector.trainable_variables
+    gradients_mini_det = tape.gradient(mini_det_loss, model.trainable_variables)
+    # tf.print(f"gradients: {gradients_mini_det}")
+    gradients_mini_det = [
+        grad if grad is not None else tf.zeros_like(var)
+        for grad, var in zip(gradients_mini_det, model.trainable_variables)
+    ]
+    clipped_gradients = [
+        tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_mini_det
+    ]
+    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+
+    return mini_det_loss, model_loss
+
+
+if __name__ == "__main__":
+    with open("./config.json", "r") as fin:
+        config = json.load(fin)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-lr", "--learning_rate", help="learning rate of optimizer", default=0.0000001
+    )
+    parser.add_argument(
+        "-bs", "--batch_size", help="batch size for dataset", default=8, type=int
+    )
+    parser.add_argument(
+        "--num_epochs", help="number of training epochs", default=10, type=int
+    )
+    parser.add_argument(
+        "--num_train_samples",
+        help="number of training samples in epoch",
+        default=20000,
+        type=int,
+    )
+    parser.add_argument(
+        "--num_valid_samples",
+        help="number of validate samples in epoch",
+        default=1000,
+        type=int,
+    )
+    parser.add_argument(
+        "--shuffle_buffer", help="dataset shuffle buffer size", default=100000, type=int
+    )
+    parser.add_argument(
+        "--to_checkpoint",
+        help="path to checkpoint directory",
+        default="/workspace/models/checkpoints",
+    )
+    parser.add_argument(
+        "--to_dataset", help="path to dataset", default="/workspace/data/tfrecords"
+    )
+    parser.add_argument(
+        "--to_loss_records",
+        help="path to store loss records",
+        default="/workspace/models/loss.txt",
+    )
+    parser.add_argument(
+        "--restore_from_ckpt", help="restore from latest checkpoints", default=False
+    )
+    parser.add_argument("--num_cls", help="number of class to classify", default=8)
+    parser.add_argument("--input_shape", help="shape of input", default=(224, 224, 3))
+    parser.add_argument(
+        "--num_encoder_blocks", help="number of encoder blocks", default=1, type=int
+    )
+    parser.add_argument(
+        "--num_decoder_blocks", help="number of decoder blocks", default=6, type=int
+    )
+    parser.add_argument(
+        "--top_k", help="k objects took in mini-detector", default=5, type=int
+    )
+
+    args = parser.parse_args()
+    train_model(
+        learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
+        num_epochs=args.num_epochs,
+        num_train_samples=args.num_train_samples,
+        num_valid_samples=args.num_valid_samples,
+        shuffle_buffer=args.shuffle_buffer,
+        to_checkpoint_dir=args.to_checkpoint,
+        to_dataset=args.to_dataset,
+        to_loss_records=args.to_loss_records,
+        num_class=args.num_cls,
+        input_shape=args.input_shape,
+        load_from_ckpt=args.restore_from_ckpt,
+        num_encoder_blocks=args.num_encoder_blocks,
+        num_decoder_blocks=args.num_decoder_blocks,
+        top_k=args.top_k,
+    )

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Dense
 
-from ..utils.positional_encoding import gen_sineembed_for_position
+from ...utils.positional_encoding import gen_sineembed_for_position
 
 
 class SelfAttention(tf.keras.layers.Layer):

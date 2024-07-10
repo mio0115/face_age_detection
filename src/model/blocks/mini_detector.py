@@ -3,7 +3,7 @@ from tensorflow.keras.layers import Conv2D, Dense
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.activations import sigmoid
 
-from ..utils.positional_encoding import gen_sineembed_for_position
+from ...utils.positional_encoding import gen_sineembed_for_position
 
 
 class MiniDetector(tf.keras.layers.Layer):
