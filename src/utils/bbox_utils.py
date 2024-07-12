@@ -5,11 +5,19 @@ import tensorflow as tf
 
 @tf.function
 def from_cxcyhw_to_xyxy(bbox_coord: tf.Tensor) -> tf.Tensor:
-    """Transform the bbox coordinates
+    """
+    Transform the bbox coordinates
     from (center_x, center_y, height, width)
     to
     (min_x, min_y, max_x, max_y)
-    we make min_x and min_y >= 0"""
+    we make min_x and min_y >= 0
+
+    Args:
+        bbox_coord: Coordinates of boundary box. (cxcyhw)
+
+    Returns:
+        tf.Tensor: Coordinates of the boundary box. (xyxy)
+    """
 
     new_bbox_coord = tf.stack(
         [
@@ -26,10 +34,18 @@ def from_cxcyhw_to_xyxy(bbox_coord: tf.Tensor) -> tf.Tensor:
 
 @tf.function
 def from_xyxy_to_cxcyhw(bbox_coord: tf.Tensor):
-    """Transform the bbox coordinates
+    """
+    Transform the bbox coordinates
     from (min_x, min_y, max_x, max_y)
     to
-    (center_x, center_y, height, width)"""
+    (center_x, center_y, height, width)
+
+    Args:
+        bbox_coord: Coordinates of boundary box. (cxcyhw)
+
+    Returns:
+        tf.Tensor: Coordinates of the boundary box. (xyxy)
+    """
 
     new_bbox_coord = tf.stack(
         [
@@ -46,6 +62,18 @@ def from_xyxy_to_cxcyhw(bbox_coord: tf.Tensor):
 
 @tf.function
 def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float = 1.0):
+    """
+    Compute the smooth l1 distance between boundary box and target boundary box.
+
+    Args:
+        bbox    : Coordinates of boundary box. (xyxy)
+        tgt_bbox: Coordinates of target boundary box. (xyxy)
+        delta   : Parameter to compute smooth l1 distance.
+
+    Returns:
+        tf.Tensor: Smooth L1 distance between bbox and tgt_bbox.
+    """
+
     # bbox     shape = (batch_size*seq_len, 4)
     # tgt_bbox shape = (batch_size, 4)
     seq_len, tgt_len = tf.shape(bbox)[0], tf.shape(tgt_bbox)[0]
@@ -62,6 +90,17 @@ def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float = 1.0):
 
 @tf.function
 def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
+    """
+    Compute the Intersection over Union (IoU) between boundary box and target boundary box.
+    IoU is computed as intersection area / union area.
+
+    Args:
+        bbox    : Coordinates of boundary box. (xyxy)
+        tgt_bbox: Coordinates of target boundary box. (xyxy)
+
+    Returns:
+        tf.Tensor: IoU between bbox and tgt_bbox.
+    """
     # The form of input coordinate is (left, upper, right, bottom)
     # Note that the zero point of an image is the left-upper corner
 
@@ -102,6 +141,23 @@ def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
 
 @tf.function
 def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
+    """
+    Compute the complete iou (CIoU) between boundary box and target boundary box.
+    CIoU is computed as
+        IoU + normalized central point difference + aspect ratio
+
+    Reference:
+        Zheng, Z., Wang, P., Liu, W., Li, J., Ye, R., & Ren, D. (2020, April).
+        Distance-IoU loss: Faster and better learning for bounding box regression.
+        In Proceedings of the AAAI conference on artificial intelligence (Vol. 34, No. 07, pp. 12993-13000).
+
+    Args:
+        bbox    : Coordinates of boundary box. (xyxy)
+        tgt_bbox: Coordinates of target boundary box. (xyxy)
+
+    Returns:
+        tf.Tensor:
+    """
     # Assume the form of bbox and tgt_bbox are both xyxy
 
     tgt_len = tf.shape(tgt_bbox)[0]
@@ -113,7 +169,6 @@ def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
 
     # normalized distance between two boxes' center
     # normalized by the length of the diagonal of the minimum box that cover tgt_bbox and bbox
-    # dist = tf.reduce_sum(tf.pow(tf.gather(tgt_cxcyhw - bbox_cxcyhw, [0, 1], axis=-1), 2), axis=-1) / tf.reduce_sum(tf.pow(big_box_max - big_box_min, 2), -1)
     center_diff = tgt_cxcyhw[..., :2] - bbox_cxcyhw[..., :2]
     sq_center_dist = tf.reduce_sum(tf.square(center_diff), axis=-1)
 

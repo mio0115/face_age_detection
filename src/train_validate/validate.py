@@ -18,8 +18,8 @@ def validate(model, images, targets, num_cls: int = 8):
 
     tgt_labels = tf.gather(targets, [0], axis=-1)
     tgt_oh_labels = tf.gather(targets, [1, 2, 3, 4, 5, 6, 7, 8], axis=-1)
-    tgt_boxes = (
-        tf.gather(targets, [9, 11, 10, 12], axis=-1) / 224.0
+    tgt_boxes = tf.gather(
+        targets, [9, 11, 10, 12], axis=-1
     )  # to min_x, min_y, max_x, max_y
 
     matched_idx = single_tgt_matcher(
@@ -37,10 +37,10 @@ def validate(model, images, targets, num_cls: int = 8):
     matched_bbox = tf.reshape(matched_bbox, shape=(-1, 4))
 
     mini_det_loss = 0.5 * cls_loss(tgt_oh_labels, matched_cls) + 0.5 * boxes_loss_v2(
-        tgt_boxes, matched_bbox
+        tgt_boxes, matched_bbox, alpha=0.0
     )
     model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
-        tgt_boxes, pred_boxes_flat
+        tgt_boxes, pred_boxes_flat, alpha=0.0
     )
 
     return mini_det_loss, model_loss

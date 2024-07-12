@@ -1,3 +1,9 @@
+import logging, os
+
+logging.disable(logging.WARNING)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+
 import tensorflow as tf
 import json
 import gc
@@ -53,20 +59,22 @@ def train_model(
     train_progress_bar = tf.keras.utils.Progbar(num_train_samples)
     valid_progress_bar = tf.keras.utils.Progbar(num_valid_samples)
 
+    dataset = full_dataset.shuffle(buffer_size=shuffle_buffer)
+    train_dataset = dataset.take(count=num_train_samples * batch_size)
+    valid_dataset = dataset.skip(count=num_train_samples * batch_size).take(
+        count=num_valid_samples * batch_size
+    )
+
     for epoch_idx in range(num_epochs):
-        dataset = full_dataset.shuffle(buffer_size=shuffle_buffer).batch(
+        train_batches = train_dataset.shuffle(buffer_size=shuffle_buffer).batch(
+            batch_size=batch_size, drop_remainder=True
+        )
+        valid_batches = valid_dataset.shuffle(buffer_size=shuffle_buffer).batch(
             batch_size=batch_size, drop_remainder=True
         )
 
-        train_dataset = dataset.take(count=num_train_samples).prefetch(
-            buffer_size=tf.data.AUTOTUNE
-        )
-        valid_dataset = dataset.skip(count=num_train_samples).prefetch(
-            buffer_size=tf.data.AUTOTUNE
-        )
-
         total_md_loss, total_loss, step = 0, 0, 0
-        for batch in train_dataset:
+        for batch in train_batches:
             logits, coord, label, oh_label = batch
 
             mini_det_loss, model_loss = train_one_step(
@@ -89,11 +97,10 @@ def train_model(
                 break
         loss_history["train_loss"] = (avg_mini_det_loss, avg_model_loss)
 
-        del dataset, train_dataset
         gc.collect()
 
         total_md_loss, total_loss, step = 0, 0, 0
-        for batch in valid_dataset:
+        for batch in valid_batches:
             logits, coord, label, oh_label = batch
 
             mini_det_loss, model_loss = validate(
@@ -118,7 +125,6 @@ def train_model(
         # Save parameters after each epoch
         checkpoint_manager.save()
 
-        del valid_dataset
         tf.keras.backend.clear_session()
         gc.collect()
 
@@ -152,8 +158,8 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
 
         tgt_labels = tf.gather(targets, [0], axis=-1)
         tgt_oh_labels = tf.gather(targets, [1, 2, 3, 4, 5, 6, 7, 8], axis=-1)
-        tgt_boxes = (
-            tf.gather(targets, [9, 11, 10, 12], axis=-1) / 224.0
+        tgt_boxes = tf.gather(
+            targets, [9, 11, 10, 12], axis=-1
         )  # to min_x, min_y, max_x, max_y
 
         matched_idx = single_tgt_matcher(
@@ -176,9 +182,9 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
 
         mini_det_loss = 0.5 * cls_loss(
             tgt_oh_labels, matched_cls
-        ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox)
+        ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox, alpha=0.0)
         model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
-            tgt_boxes, pred_boxes_flat
+            tgt_boxes, pred_boxes_flat, alpha=0.0
         )
 
     gradients_destr = tape.gradient(
@@ -300,7 +306,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-lr", "--learning_rate", help="learning rate of optimizer", default=0.0000001
+        "--learning_rate", help="learning rate of optimizer", default=0.000001
     )
     parser.add_argument(
         "-bs", "--batch_size", help="batch size for dataset", default=8, type=int
@@ -321,7 +327,7 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--shuffle_buffer", help="dataset shuffle buffer size", default=100000, type=int
+        "--shuffle_buffer", help="dataset shuffle buffer size", default=20000, type=int
     )
     parser.add_argument(
         "--to_checkpoint",

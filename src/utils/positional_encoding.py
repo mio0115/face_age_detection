@@ -5,6 +5,16 @@ import numpy as np
 
 
 def gen_sineembed_for_position(pos_tensor, d_model):
+    """
+    Positional embedding of pos_tensor with depth d_model.
+
+    Args:
+        pos_tensor: The tensor to get positional embedding.
+        d_model   : The depth of pos_tensor. (tf.shape(pos_tensor)[-1])
+
+    Returns:
+        tf.Tensor: A tensor which is offset of pos_tensor.
+    """
     scale = 2 * math.pi
     fd_model = d_model // 2
     dim_t = tf.range(fd_model, dtype=tf.float32)

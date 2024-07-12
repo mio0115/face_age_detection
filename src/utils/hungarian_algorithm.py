@@ -206,6 +206,19 @@ class HungarianMatcher(tf.keras.layers.Layer):
 
 
 class SingleTargetMatcher(tf.keras.layers.Layer):
+    """
+    Since there is only one label for each image in dataset, we only give one object proposal for every image.
+
+    Args:
+        outputs   : Outputs from the model.
+        tgt_labels: Target label of images in the batch.
+        tgt_bbox  : Target coordinates of boundary box of images in the batch.
+        is_xyxy   : Form of coordinates of boundary box in outputs.
+
+    Returns:
+        tf.Tensor: Desired outputs for each image in the batch.
+    """
+
     def __init__(
         self,
         cost_class: float = 1.0,
@@ -271,7 +284,7 @@ class SingleTargetMatcher(tf.keras.layers.Layer):
 
         cost = tf.reshape(cost, shape=(batch_size, num_objects, -1))
 
-        tgt_sizes = [1] * 8 # 8 is the batch size
+        tgt_sizes = [1] * 8  # 8 is the batch size
 
         return [
             tf.argmin(cost[batch_idx], axis=0, output_type=tf.int32)

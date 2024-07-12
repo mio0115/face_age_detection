@@ -23,6 +23,16 @@ def boxes_loss(tgt_boxes, pred_boxes, alpha=0.3, beta=0.3):
 
 @tf.function
 def boxes_loss_v2(tgt_boxes, pred_boxes, alpha=0.5):
+    """
+    Compute the boxes loss between boundary box and target box.
+
+    Args:
+        pred_boxes: Coordinates of predicted boundary box. (cxcyhw)
+        tgt_boxes : Coordinates of target boundary box. (xyxy)
+
+    Return:
+        tf.Tensor: loss of predicted boundary box.
+    """
     pred_xyxy = from_cxcyhw_to_xyxy(pred_boxes)
 
     idx = tf.range(0, tf.shape(pred_boxes)[0])
@@ -37,6 +47,15 @@ def boxes_loss_v2(tgt_boxes, pred_boxes, alpha=0.5):
 
 @tf.function
 def _penalty_of_weight_height(bbox, limit=1.0):
+    """
+    Give penalty to the illegal boundary box.
+
+    Args:
+        bbox: Coordinates of boundary box. (xyxy)
+
+    Return:
+        tf.Tensor: penalty of illegal boundary box.
+    """
     # The function is to compute the penalty of illegal height and width
     # illegal height and width is the height and width that exceed 2 * center_y and 2 * center_x, respectively
     # bbox shape: (batch_size, seq_len, 4)
