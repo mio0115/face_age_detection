@@ -126,8 +126,7 @@ class PairSelfAttention(tf.keras.layers.Layer):
         )
 
         a2 = tf.keras.activations.softmax(
-            (a2_l + a2_r)
-            / tf.sqrt(2 * tf.cast(self.input_embedding_dim, dtype=tf.float32))
+            (a2_l + a2_r) / tf.sqrt(2 * self.input_embedding_dim)
         )
         # shape = (batch_size, heads_num, sequence_length, per_head_dim)
         o2 = tf.matmul(a2, value)
@@ -178,7 +177,7 @@ def _get_pairs(top_k_coord: tf.Tensor):
     bbox_union_area = bbox_area1 + bbox_area2 - inter_area
     # the IoU between two same objects is 1, we do not want that kind of pair.
     bbox_iou = inter_area / bbox_union_area - tf.eye(
-        num_objects, batch_shape=[batch_size]
+        num_objects, batch_shape=[batch_size], dtype=tf.float32
     )
 
     # turn the indices from [[0, 2, 1]] to [[[0, 0], [1, 2], [2, 1]]]

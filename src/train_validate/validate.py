@@ -39,8 +39,9 @@ def validate(model, images, targets, num_cls: int = 8):
     mini_det_loss = 0.5 * cls_loss(tgt_oh_labels, matched_cls) + 0.5 * boxes_loss_v2(
         tgt_boxes, matched_bbox, alpha=0.0
     )
-    model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
+    model_loss = 0.3 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.7 * boxes_loss_v2(
         tgt_boxes, pred_boxes_flat, alpha=0.0
     )
+    box_loss = boxes_loss_v2(tgt_boxes, pred_boxes_flat, alpha=0.0)
 
-    return mini_det_loss, model_loss
+    return mini_det_loss, model_loss, box_loss

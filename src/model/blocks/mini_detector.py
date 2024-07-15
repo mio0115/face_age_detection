@@ -118,7 +118,10 @@ class MiniDetector(tf.keras.layers.Layer):
 
         pos_center_offset = self._pos_head(pos_features)
         pos_center_offset = tf.concat(
-            [pos_center_offset, tf.zeros(shape=(batch_size, self.sequence_length, 2))],
+            [
+                pos_center_offset,
+                tf.zeros(shape=(batch_size, self.sequence_length, 2), dtype=tf.float32),
+            ],
             axis=-1,
         )
 

@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 
+@tf.function
 def gen_sineembed_for_position(pos_tensor, d_model):
     """
     Positional embedding of pos_tensor with depth d_model.

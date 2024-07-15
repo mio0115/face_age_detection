@@ -187,6 +187,10 @@ def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
     sq_aspect_ratio_diff = tf.square(tgt_aspect_ratio - bbox_aspect_ratio)
 
     aspect_ratio = 4.0 / tf.square(math.pi) * sq_aspect_ratio_diff
-    alpha = tf.where(tf.less(iou, 0.5), 0.0, aspect_ratio / (1 - iou + aspect_ratio))
+    alpha = tf.where(
+        tf.less(iou, 0.5),
+        0.0,
+        aspect_ratio / (1 - iou + aspect_ratio),
+    )
 
     return iou - norm_dist - alpha * aspect_ratio

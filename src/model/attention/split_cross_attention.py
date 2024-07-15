@@ -66,18 +66,30 @@ class CrossAttention(tf.keras.layers.Layer):
         )  # to 512 (8, 32) -> (8, 64)
 
         # key
-        encoder_output = self._split_heads(encoder_output, 49)
+        # Form encoder_output with dim 512 as (8, 64)
+        # encoder_output = self._split_heads(encoder_output, 49)
+        encoder_output = tf.reshape(
+            encoder_output,
+            shape=(batch_size, 49, self.heads_num, 512 // self.heads_num),
+        )
+        encoder_output = tf.transpose(encoder_output, perm=[0, 2, 1, 3])
+
+        key_encoder_pos = tf.reshape(
+            key_encoder_pos,
+            shape=(batch_size, 49, self.heads_num, 256 // self.heads_num),
+        )
+        key_encoder_pos = tf.transpose(key_encoder_pos, perm=[0, 2, 1, 3])
         key = tf.concat(
-            [self._proj_to_key(encoder_output), self._split_heads(key_encoder_pos, 49)],
+            [self._proj_to_key(encoder_output), key_encoder_pos],
             axis=-1,
-        )  # ()
+        )
 
         # value
         value = self._proj_to_value(encoder_output)
 
         a_cross = tf.nn.softmax(
             tf.matmul(query, tf.transpose(key, perm=[0, 1, 3, 2]))
-            / tf.sqrt(tf.cast(self.embedding_dim, dtype=tf.float32)),
+            / tf.sqrt(self.embedding_dim),
             axis=-1,
         )
         o = tf.matmul(a_cross, value)  # (8, 512)

@@ -1,5 +1,6 @@
 <div align="center">
-# Face Age Detection
+### Face Age Detection
+</div>
 
 ## Description
 The goal of this project is to detect human face and his/her age in an image. We use DESTR model from paper "Object Detection with Split Transformer" and train on the dataset IMDB wiki which has over 300k images. This project run in a docker container.

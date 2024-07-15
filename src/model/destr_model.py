@@ -36,8 +36,6 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
 
         # Reduce channels from 2048 to 512
         self._reduce_dim = Conv2D(filters=hidden_dim, kernel_size=(1, 1))
-        # Reduce channels from 512 to 256
-        self._reduce_dim_2 = Conv2D(filters=hidden_dim // 2, kernel_size=(1, 1))
         # Mini detector used to output object proposals to following decoders
         self._mini_detector = MiniDetector(
             input_shape=(7, 7, hidden_dim),
@@ -93,10 +91,7 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         batch_size = tf.shape(inputs)[0]
 
         inputs = tf.ensure_shape(inputs, [None, *self._resnet_backbone.input.shape[1:]])
-        inputs = tf.cast(inputs, dtype=tf.float32)
-
-        tf.debugging.check_numerics(inputs, "NaN detected from inputs.")
-
+        inputs = tf.keras.applications.resnet.preprocess_input(inputs)
         x = self._resnet_backbone(inputs)
         tf.debugging.check_numerics(x, "NaN detected from Backbone.")
 
@@ -130,17 +125,10 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         x = top_k_proposals
         tf.debugging.check_numerics(x, "NaN detected from MiniDetector.")
 
-        # reduce the channels of x from 512 to 256 for forwarding
-        encoder_output = tf.reshape(
-            self._reduce_dim_2(tf.reshape(encoder_output, shape=(-1, 7, 7, 512))),
-            shape=(-1, 49, 256),
-        )  # embedding dimension from 512 to 256
-
         for idx in range(self._num_decoders):
             x = self._decoder_blocks[idx](x, encoder_output, top_k_centers, top_k_pos)
 
-        cls_x = x[..., : self._hidden_dim // 2]
-        reg_x = x[..., self._hidden_dim // 2 :]
+        cls_x, reg_x = tf.split(x, num_or_size_splits=2, axis=-1)
         cls_x = self.layer_norm1(cls_x)
         reg_x = self.layer_norm2(reg_x)
 
@@ -157,7 +145,13 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         return cls_output, bbox_output, all_proposals
 
 
-def build_model(input_shape, num_cls, num_encoder_blocks, num_decoder_blocks, top_k):
+def build_model(
+    input_shape=(224, 224, 3),
+    num_cls=8,
+    num_encoder_blocks=1,
+    num_decoder_blocks=6,
+    top_k=5,
+):
     destr_block = ObjDetSplitTransformer(
         input_shape=input_shape,
         num_cls=num_cls,

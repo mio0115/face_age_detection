@@ -18,6 +18,10 @@ from ..utils.padding import padding_oh_labels
 from .validate import validate
 
 
+# policy = tf.keras.mixed_precision.Policy("mixed_float16")
+# tf.keras.mixed_precision.set_global_policy(policy)
+
+
 def train_model(
     learning_rate,
     batch_size,
@@ -54,6 +58,18 @@ def train_model(
     loss_history = {"train_loss": (0, 0), "valid_loss": (0, 0)}
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    optimizers = {
+        "mini_det": tf.keras.optimizers.Adam(
+            learning_rate=learning_rate * 0.1, clipnorm=1.0
+        ),
+        "model": tf.keras.optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0),
+    }
+    optimizers["mini_det"] = tf.keras.mixed_precision.LossScaleOptimizer(
+        optimizers["mini_det"]
+    )
+    optimizers["model"] = tf.keras.mixed_precision.LossScaleOptimizer(
+        optimizers["model"]
+    )
     full_dataset = load_data_tfrecord(path_to_tfrecord=to_dataset)
 
     train_progress_bar = tf.keras.utils.Progbar(num_train_samples)
@@ -73,54 +89,58 @@ def train_model(
             batch_size=batch_size, drop_remainder=True
         )
 
-        total_md_loss, total_loss, step = 0, 0, 0
+        total_md_loss, total_loss, step, total_box_loss = 0, 0, 0, 0
         for batch in train_batches:
             logits, coord, label, oh_label = batch
 
-            mini_det_loss, model_loss = train_one_step(
+            mini_det_loss, model_loss, box_loss = train_one_step(
                 model,
-                optimizer,
+                optimizers,
                 tf.reshape(
                     tf.cast(tf.io.decode_raw(logits, tf.uint8), tf.float32),
                     shape=(-1,) + input_shape,
                 ),
-                tf.concat([label[..., tf.newaxis], oh_label, coord], axis=-1),
+                tf.concat([label[..., tf.newaxis], oh_label, coord / 224], axis=-1),
             )
             total_md_loss += mini_det_loss.numpy()
             total_loss += model_loss.numpy()
+            total_box_loss += box_loss.numpy()
 
             step += 1
             train_progress_bar.update(step)
             if step == num_train_samples:
                 avg_mini_det_loss = total_md_loss / num_train_samples
                 avg_model_loss = total_loss / num_train_samples
+                avg_box_loss = total_box_loss / num_train_samples
                 break
-        loss_history["train_loss"] = (avg_mini_det_loss, avg_model_loss)
+        loss_history["train_loss"] = (avg_mini_det_loss, avg_model_loss, avg_box_loss)
 
         gc.collect()
 
-        total_md_loss, total_loss, step = 0, 0, 0
+        total_md_loss, total_loss, step, total_box_loss = 0, 0, 0, 0
         for batch in valid_batches:
             logits, coord, label, oh_label = batch
 
-            mini_det_loss, model_loss = validate(
+            mini_det_loss, model_loss, box_loss = validate(
                 model,
                 tf.reshape(
                     tf.cast(tf.io.decode_raw(logits, tf.uint8), tf.float32),
                     shape=(-1,) + input_shape,
                 ),
-                tf.concat([label[..., tf.newaxis], oh_label, coord], axis=-1),
+                tf.concat([label[..., tf.newaxis], oh_label, coord / 224], axis=-1),
             )
             total_md_loss += mini_det_loss.numpy()
             total_loss += model_loss.numpy()
+            total_box_loss += box_loss.numpy()
 
             step += 1
             valid_progress_bar.update(step)
             if step == num_valid_samples:
                 avg_mini_det_loss = total_md_loss / num_valid_samples
                 avg_model_loss = total_loss / num_valid_samples
+                avg_box_loss = total_box_loss / num_valid_samples
                 break
-        loss_history["valid_loss"] = (avg_mini_det_loss, avg_model_loss)
+        loss_history["valid_loss"] = (avg_mini_det_loss, avg_model_loss, avg_box_loss)
 
         # Save parameters after each epoch
         checkpoint_manager.save()
@@ -130,8 +150,8 @@ def train_model(
 
         print(
             f"""epoch {epoch_idx+1:>2}: \n
-            \t train_loss: {loss_history["train_loss"][0]:.4f} {loss_history["train_loss"][1]:.4f},
-            \t valid loss: {loss_history["valid_loss"][0]:.4f} {loss_history["valid_loss"][1]:.4f}"""
+            \t train_loss: {loss_history["train_loss"][0]:.4f} {loss_history["train_loss"][1]:.4f}, {loss_history["train_loss"][2]:.4f}
+            \t valid loss: {loss_history["valid_loss"][0]:.4f} {loss_history["valid_loss"][1]:.4f}, {loss_history["valid_loss"][2]:.4f}"""
         )
         with open(to_loss_records, mode="w") as fout:
             print(
@@ -183,9 +203,10 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
         mini_det_loss = 0.5 * cls_loss(
             tgt_oh_labels, matched_cls
         ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox, alpha=0.0)
-        model_loss = 0.5 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.5 * boxes_loss_v2(
+        model_loss = 0.3 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.7 * boxes_loss_v2(
             tgt_boxes, pred_boxes_flat, alpha=0.0
         )
+        box_loss = boxes_loss_v2(tgt_boxes, pred_boxes_flat, alpha=0.0)
 
     gradients_destr = tape.gradient(
         model_loss,
@@ -195,8 +216,7 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
         grad if grad is not None else tf.zeros_like(var)
         for grad, var in zip(gradients_destr, model.trainable_variables)
     ]
-    clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_destr]
-    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+    optimizer["model"].apply_gradients(zip(gradients_destr, model.trainable_variables))
 
     # mini_det_vars = model.get_layer(name='obj_det_split_transformer')._mini_detector.trainable_variables
     gradients_mini_det = tape.gradient(
@@ -207,14 +227,13 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
         grad if grad is not None else tf.zeros_like(var)
         for grad, var in zip(gradients_mini_det, model.trainable_variables)
     ]
-    clipped_gradients = [
-        tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_mini_det
-    ]
-    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+    optimizer["mini_det"].apply_gradients(
+        zip(gradients_mini_det, model.trainable_variables)
+    )
 
     del tape
 
-    return mini_det_loss, model_loss
+    return mini_det_loss, model_loss, box_loss
 
 
 @tf.function
@@ -245,11 +264,8 @@ def train_one_stepV2(
             default_value=0.0, shape=(batch_size, padding_to_k, num_cls - 1)
         )  # a class is for empty object
         tgt_oh_labels = padding_oh_labels(tgt_oh_labels)
-        tgt_boxes = (
-            tf.gather(targets, [9, 11, 10, 12], axis=-1).to_tensor(
-                default_value=0.0, shape=(batch_size, padding_to_k, 4)
-            )
-            / 224.0
+        tgt_boxes = tf.gather(targets, [9, 11, 10, 12], axis=-1).to_tensor(
+            default_value=0.0, shape=(batch_size, padding_to_k, 4)
         )  # to min_x, min_y, max_x, max_y
 
         matched_idx = single_tgt_matcher(

@@ -2,13 +2,13 @@
 
 # VARIABLES
 IMAGE_NAME="projects/destr"
-IMAGE_TAG="train"
-CONTAINER_NAME="destr_container_train"
+IMAGE_TAG="draw"
+CONTAINER_NAME="destr_container_draw"
 HOST_PORT=5005
 CONTAINER_PORT=8888
 DATA_VOLUME_NAME="datasets"
 MODEL_VOLUME_NAME="models"
-DOCKERFILE="Dockerfile"
+DOCKERFILE="Dockerfile_draw"
 
 # Build image
 echo "Building the Docker image..."
@@ -28,7 +28,7 @@ if [ $(docker ps -q -f name=$CONTAINER_NAME) ]; then
 fi
 
 # Run the docker container
-docker run -it --rm --name $CONTAINER_NAME -p "$HOST_PORT:$CONTAINER_PORT" --gpus all --cpus="6" --memory="15g" -v $DATA_VOLUME_NAME:/workspace/data -v $MODEL_VOLUME_NAME:/workspace/models "$IMAGE_NAME:$IMAGE_TAG"
+docker run -it --rm --name $CONTAINER_NAME -p "$HOST_PORT:$CONTAINER_PORT" --gpus all --cpus="6" --memory="10g" -v $DATA_VOLUME_NAME:/workspace/data -v $MODEL_VOLUME_NAME:/workspace/models "$IMAGE_NAME:$IMAGE_TAG"
 
 #if [ -n "$SSH_USER" ] && [ -n "$SSH_SERVER" ]; then
 #    echo "Setting up SSH tunneling..."

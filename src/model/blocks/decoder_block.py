@@ -108,12 +108,11 @@ class DecoderBlock(tf.keras.layers.Layer):
                 self.object_queries_embedding_dim,
             ),
         )
-        # print(f'decoder output: {tf.shape(o)}')
         return o
 
 
 class ClsRegBranch(tf.keras.layers.Layer):
-    def __init__(self, object_queries_shape: tuple[int], hidden_dim: int = 512):
+    def __init__(self, object_queries_shape: tuple[int], hidden_dim: int = 256):
         super(ClsRegBranch, self).__init__()
 
         self.cross_attn = CrossAttention(
@@ -122,8 +121,8 @@ class ClsRegBranch(tf.keras.layers.Layer):
             d_v=hidden_dim,
             obj_input_shape=object_queries_shape,
         )
-        self.dense1 = Dense(units=hidden_dim // 2)
-        self.dense2 = Dense(units=hidden_dim // 2)
+        self.dense1 = Dense(units=hidden_dim)
+        self.dense2 = Dense(units=hidden_dim)
         self.dropout1 = Dropout(0.1)
         self.dropout2 = Dropout(0.1)
         self.layer_norm = LayerNormalization()

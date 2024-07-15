@@ -1,0 +1,22 @@
+FROM tensorflow/tensorflow:2.16.1-gpu-jupyter
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    libgl1-mesa-glx \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+   
+RUN mkdir /workspace
+WORKDIR /workspace
+
+COPY requirements.txt .
+COPY scripts/train.sh .
+
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8888
+
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
