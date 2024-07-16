@@ -92,7 +92,7 @@ class SelfAttention(tf.keras.layers.Layer):
 
         # shape = (batch_size, heads_num, seq_len, seq_len)
         a_sc = tf.matmul(q, tf.transpose(k, perm=[0, 1, 3, 2])) / tf.sqrt(
-            tf.cast(self._d_k, tf.float32)
+            tf.cast(self._d_k, tf.float16)
         )
         a_sc = tf.keras.activations.softmax(a_sc)
         output = tf.matmul(a_sc, v)

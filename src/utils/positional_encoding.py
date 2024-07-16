@@ -16,10 +16,15 @@ def gen_sineembed_for_position(pos_tensor, d_model):
     Returns:
         tf.Tensor: A tensor which is offset of pos_tensor.
     """
-    scale = 2 * math.pi
+    scale = tf.constant(2 * math.pi, dtype=tf.float16)
     fd_model = d_model // 2
-    dim_t = tf.range(fd_model, dtype=tf.float32)
-    dim_t = 10000 ** (2 * (dim_t // 2) / fd_model)
+    dim_t = tf.cast(tf.range(fd_model, dtype=tf.float32), dtype=tf.float16)
+    dim_t = tf.constant(10000, dtype=tf.float16) ** tf.cast(
+        tf.constant(2, dtype=tf.float16)
+        * (dim_t // tf.constant(2, dtype=tf.float16))
+        / fd_model,
+        dtype=tf.float16,
+    )
 
     x_embed = pos_tensor[..., 0] * scale
     y_embed = pos_tensor[..., 1] * scale
