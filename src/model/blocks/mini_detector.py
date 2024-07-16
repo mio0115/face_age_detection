@@ -8,7 +8,13 @@ from ...utils.positional_encoding import gen_sineembed_for_position
 
 class MiniDetector(tf.keras.layers.Layer):
     def __init__(
-        self, input_shape, cls_num: int, top_k: int, hidden_dim: int = 256, **kwargs
+        self,
+        input_shape,
+        reg_ffn,
+        cls_num: int,
+        top_k: int,
+        hidden_dim: int = 256,
+        **kwargs
     ):
         super(MiniDetector, self).__init__(**kwargs)
 
@@ -52,19 +58,8 @@ class MiniDetector(tf.keras.layers.Layer):
         )
 
         self._cls_head = Dense(units=cls_num, activation="sigmoid")
-        self._reg_head = Sequential(
-            [
-                Dense(units=256, activation="relu"),
-                Dense(units=256, activation="relu"),
-                Dense(
-                    units=4, activation="sigmoid"
-                ),  # use sigmoid instead of relu to restrict the coord between 0 and 1.
-            ],
-            name="mini_detector_regression_head",
-        )
-        self._pos_head = Sequential(
-            [Dense(units=256, activation="relu"), Dense(units=2, activation="linear")]
-        )
+        self._reg_head = reg_ffn
+        self._pos_head = Sequential([Dense(units=256), Dense(units=2)])
 
     @property
     def input_shape(self):

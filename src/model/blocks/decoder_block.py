@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import LayerNormalization, Dense, Dropout
+from tensorflow.keras.layers import LayerNormalization, Dense, Dropout  # type: ignore
 
 from ..attention.self_attention import SelfAttention
 from ..attention.pair_self_attention import PairSelfAttention
@@ -121,19 +121,20 @@ class ClsRegBranch(tf.keras.layers.Layer):
             d_v=hidden_dim,
             obj_input_shape=object_queries_shape,
         )
-        self.dense1 = Dense(units=hidden_dim)
+
+        self.dense1 = Dense(units=hidden_dim, activation="relu")
         self.dense2 = Dense(units=hidden_dim)
-        self.dropout1 = Dropout(0.1)
-        self.dropout2 = Dropout(0.1)
-        self.layer_norm = LayerNormalization()
+        self.dropout = Dropout(0.1)
+        self.layer_norm1 = LayerNormalization()
+        self.layer_norm2 = LayerNormalization()
 
     def call(self, inputs, query_obj_pos, encoder_output, key_pos):
         ca = self.cross_attn(inputs, query_obj_pos, encoder_output, key_pos)
 
-        output = self.dense1(ca)
-        output = self.dropout1(output)
-        output = self.dense2(output)
-        output = self.dropout2(output)
-        output = self.layer_norm(output)
+        x = inputs + self.dropout(ca)
+        x = self.layer_norm1(x)
+        x_2 = self.dense2(self.dropout(self.dense1(x)))
+        x = x + self.dropout(x_2)
+        x = self.layer_norm2(x)
 
-        return output
+        return x

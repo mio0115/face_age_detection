@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import LayerNormalization, Conv2D
+from tensorflow.keras.layers import LayerNormalization, Conv2D, Dense
 from tensorflow.keras.models import Sequential
 
 from .blocks.encoder_block import EncoderBlock
@@ -34,6 +34,17 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             weights="imagenet", include_top=False, input_shape=input_shape
         )
 
+        self._hidden_dim = hidden_dim
+        # Class feed-forward network is to classify predicted objects.
+        self._cls_ffn = tf.keras.layers.Dense(units=num_cls, activation="softmax")
+        # Regression feed-froward network is to regress boundary boxes of each predicted objects
+        self._reg_ffn = Sequential(
+            [Dense(units=256), Dense(units=256), Dense(units=4)],
+            name="regression_head_coord",
+        )
+        self.layer_norm1 = LayerNormalization()
+        self.layer_norm2 = LayerNormalization()
+
         # Reduce channels from 2048 to 512
         self._reduce_dim = Conv2D(filters=hidden_dim, kernel_size=(1, 1))
         # Mini detector used to output object proposals to following decoders
@@ -41,6 +52,7 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             input_shape=(7, 7, hidden_dim),
             cls_num=num_cls,
             top_k=top_k,
+            reg_ffn=self._reg_ffn,
             name="mini-detector",
         )
         self._num_encoders = num_encoder_blocks
@@ -69,16 +81,6 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             )
             for idx in range(num_decoder_blocks)
         ]
-
-        self._hidden_dim = hidden_dim
-        # Class feed-forward network is to classify predicted objects.
-        self._cls_ffn = tf.keras.layers.Dense(units=num_cls, activation="softmax")
-        # Regression feed-froward network is to regress boundary boxes of each predicted objects
-        self._reg_ffn = tf.keras.layers.Dense(
-            units=4, activation="sigmoid"
-        )  # use sigmoid instead of relu to restrict the output between 0 and 1.
-        self.layer_norm1 = LayerNormalization()
-        self.layer_norm2 = LayerNormalization()
 
     def call(self, inputs):
         # extend for the batch dimension
