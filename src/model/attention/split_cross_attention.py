@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense  # type: ignore
 
 
 class CrossAttention(tf.keras.layers.Layer):
@@ -89,7 +89,7 @@ class CrossAttention(tf.keras.layers.Layer):
 
         a_cross = tf.nn.softmax(
             tf.matmul(query, tf.transpose(key, perm=[0, 1, 3, 2]))
-            / tf.sqrt(self.embedding_dim),
+            / tf.sqrt(tf.cast(self.embedding_dim, dtype=tf.float32)),
             axis=-1,
         )
         o = tf.matmul(a_cross, value)  # (8, 512)

@@ -49,7 +49,7 @@ def train_model(
 
     checkpoint = tf.train.Checkpoint(model=model)
     checkpoint_manager = tf.train.CheckpointManager(
-        checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=1
+        checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=3
     )
 
     if load_from_ckpt:
@@ -59,17 +59,15 @@ def train_model(
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizers = {
-        "mini_det": tf.keras.optimizers.Adam(
-            learning_rate=learning_rate * 0.1, clipnorm=1.0
-        ),
-        "model": tf.keras.optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0),
+        "mini_det": tf.keras.optimizers.Adam(learning_rate=learning_rate * 0.1),
+        "model": tf.keras.optimizers.Adam(learning_rate=learning_rate),
     }
-    optimizers["mini_det"] = tf.keras.mixed_precision.LossScaleOptimizer(
-        optimizers["mini_det"]
-    )
-    optimizers["model"] = tf.keras.mixed_precision.LossScaleOptimizer(
-        optimizers["model"]
-    )
+    # optimizers["mini_det"] = tf.keras.mixed_precision.LossScaleOptimizer(
+    #    optimizers["mini_det"]
+    # )
+    # optimizers["model"] = tf.keras.mixed_precision.LossScaleOptimizer(
+    #    optimizers["model"]
+    # )
     full_dataset = load_data_tfrecord(path_to_tfrecord=to_dataset)
 
     train_progress_bar = tf.keras.utils.Progbar(num_train_samples)
@@ -200,10 +198,14 @@ def train_one_step(model, optimizer, images, targets, num_cls: int = 8):
         )
         matched_bbox = tf.reshape(matched_bbox, shape=(-1, 4))
 
-        mini_det_loss = 0.5 * cls_loss(
+        mini_det_loss = tf.constant(0.5, dtype=tf.float32) * cls_loss(
             tgt_oh_labels, matched_cls
-        ) + 0.5 * boxes_loss_v2(tgt_boxes, matched_bbox, alpha=0.0)
-        model_loss = 0.3 * cls_loss(tgt_oh_labels, pred_cls_flat) + 0.7 * boxes_loss_v2(
+        ) + tf.constant(0.5, dtype=tf.float32) * boxes_loss_v2(
+            tgt_boxes, matched_bbox, alpha=0.0
+        )
+        model_loss = tf.constant(0.3, dtype=tf.float32) * cls_loss(
+            tgt_oh_labels, pred_cls_flat
+        ) + tf.constant(0.7, dtype=tf.float32) * boxes_loss_v2(
             tgt_boxes, pred_boxes_flat, alpha=0.0
         )
         box_loss = boxes_loss_v2(tgt_boxes, pred_boxes_flat, alpha=0.0)

@@ -1,7 +1,7 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, Dense
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.activations import sigmoid
+from tensorflow.keras.layers import Conv2D, Dense  # type: ignore
+from tensorflow.keras.models import Sequential  # type: ignore
+from tensorflow.keras.activations import sigmoid  # type: ignore
 
 from ...utils.positional_encoding import gen_sineembed_for_position
 

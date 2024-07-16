@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense  # type: ignore
 
 
 class PairSelfAttention(tf.keras.layers.Layer):
@@ -126,7 +126,8 @@ class PairSelfAttention(tf.keras.layers.Layer):
         )
 
         a2 = tf.keras.activations.softmax(
-            (a2_l + a2_r) / tf.sqrt(2 * self.input_embedding_dim)
+            (a2_l + a2_r)
+            / tf.sqrt(tf.cast(2 * self.input_embedding_dim, dtype=tf.float32))
         )
         # shape = (batch_size, heads_num, sequence_length, per_head_dim)
         o2 = tf.matmul(a2, value)
