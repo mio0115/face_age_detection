@@ -324,7 +324,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--learning_rate", help="learning rate of optimizer", default=0.000001
+        "--learning_rate", help="learning rate of optimizer", default=0.0000001
     )
     parser.add_argument(
         "-bs", "--batch_size", help="batch size for dataset", default=8, type=int

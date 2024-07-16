@@ -55,7 +55,7 @@ class MiniDetector(tf.keras.layers.Layer):
         self._reg_head = Sequential(
             [
                 Dense(units=256, activation="relu"),
-                Dense(units=64, activation="relu"),
+                Dense(units=256, activation="relu"),
                 Dense(
                     units=4, activation="sigmoid"
                 ),  # use sigmoid instead of relu to restrict the coord between 0 and 1.
