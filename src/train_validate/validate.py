@@ -41,7 +41,7 @@ def validate(model, images, targets, num_cls: int = 8):
     ) + tf.constant(0.5, dtype=tf.float32) * boxes_loss_v2(
         tgt_boxes, matched_bbox, alpha=0.0
     )
-    model_loss = tf.constant(0.5, dtype=tf.float32) * cls_loss(
+    model_loss = tf.constant(0.3, dtype=tf.float32) * cls_loss(
         tgt_oh_labels, pred_cls_flat
     ) + tf.constant(0.7, dtype=tf.float32) * boxes_loss_v2(
         tgt_boxes, pred_boxes_flat, alpha=0.0

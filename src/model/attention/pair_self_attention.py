@@ -43,7 +43,7 @@ class PairSelfAttention(tf.keras.layers.Layer):
 
         return x
 
-    def call(self, content_embedding, obj_pos_encoding, top_k_centers):
+    def call(self, content_embedding, top_k_centers, q_obj_pos, k_obj_pos):
         """Implmentation based on DESTR: Object Detection with Split Transformer
         Instead of self-attention, authors use pair self-attention.
         The steps of pair self-attention are as following:
@@ -54,8 +54,11 @@ class PairSelfAttention(tf.keras.layers.Layer):
         batch_size = tf.shape(content_embedding)[0]
 
         # shape = (batch_size, sequence_length, input_embedding_dim)
-        x_to_query_key = self._split_heads(content_embedding + obj_pos_encoding)
+        x_to_query_key = self._split_heads(content_embedding)
         x_to_value = self._split_heads(content_embedding)
+
+        q_obj_pos = self._split_heads(q_obj_pos)
+        k_obj_pos = self._split_heads(k_obj_pos)
 
         """ The following block is to find indices of pairs based on their IoU. 
         Component a is paired up with Component a' if their IoU is larger than other components
@@ -89,9 +92,131 @@ class PairSelfAttention(tf.keras.layers.Layer):
             axis=-1,
         )
 
-        query = self._proj_to_query(x_to_query_key)
-        key = self._proj_to_key(x_to_query_key)
+        query = self._proj_to_query(x_to_query_key) + q_obj_pos
+        key = self._proj_to_key(x_to_query_key) + k_obj_pos
         value = self._proj_to_value(x_to_value)
+
+        """ We compute A2(a, b) = <q_{pi a}, k_{pi b}> + <q_{pi a'}, k_{pi b'}> """
+        a2 = tf.matmul(query, tf.transpose(key, perm=[0, 1, 3, 2]))
+
+        a2_l = tf.gather_nd(
+            a2,
+            tf.broadcast_to(
+                idx_pairs_l[:, tf.newaxis, ...],
+                shape=[
+                    batch_size,
+                    self.heads_num,
+                    self.sequence_length,
+                    self.sequence_length,
+                    2,
+                ],
+            ),
+            batch_dims=2,
+        )
+        a2_r = tf.gather_nd(
+            a2,
+            tf.broadcast_to(
+                idx_pairs_r[:, tf.newaxis, ...],
+                shape=[
+                    batch_size,
+                    self.heads_num,
+                    self.sequence_length,
+                    self.sequence_length,
+                    2,
+                ],
+            ),
+            batch_dims=2,
+        )
+
+        a2 = tf.keras.activations.softmax(
+            (a2_l + a2_r)
+            / tf.sqrt(tf.cast(2 * self.input_embedding_dim, dtype=tf.float32))
+        )
+        # shape = (batch_size, heads_num, sequence_length, per_head_dim)
+        o2 = tf.matmul(a2, value)
+        o2 = tf.transpose(o2, perm=[0, 2, 1, 3])
+
+        return tf.reshape(o2, shape=[batch_size, self.sequence_length, -1])
+
+
+class PairSelfAttentionV2(tf.keras.layers.Layer):
+    def __init__(self, input_shape: tuple[int], heads_num: int):
+        super(PairSelfAttentionV2, self).__init__()
+        self._input_shape = input_shape
+        self._heads_num = heads_num
+
+    @property
+    def input_shape(self):
+        return self._input_shape
+
+    @property
+    def heads_num(self):
+        return self._heads_num
+
+    @property
+    def sequence_length(self):
+        return self._input_shape[0]
+
+    @property
+    def input_embedding_dim(self):
+        return self._input_shape[-1]
+
+    @property
+    def per_head_dim(self):
+        return self._input_shape[-1] // self._heads_num
+
+    def _split_heads(self, x):
+        batch_size = tf.shape(x)[0]
+
+        x = tf.reshape(
+            x,
+            shape=(batch_size, self.sequence_length, self.heads_num, self.per_head_dim),
+        )
+        x = tf.transpose(x, perm=[0, 2, 1, 3])
+
+        return x
+
+    def call(self, query, key, value, top_k_centers):
+        """Implmentation based on DESTR: Object Detection with Split Transformer
+        Instead of self-attention, authors use pair self-attention.
+        The steps of pair self-attention are as following:
+        1. Pairs up those components of input feature map.
+        2. Compute a2 score.
+        3. Compute o2 score.
+        """
+        batch_size = tf.shape(query)[0]
+
+        """ The following block is to find indices of pairs based on their IoU. 
+        Component a is paired up with Component a' if their IoU is larger than other components
+        To compute A2, we need to pair up indices of (a, b) and (a', b')
+        """
+        pairs = _get_pairs(top_k_centers)  # shape (batch_size, head_nums, seq_len, 4)
+        idx_pairs_l = tf.stack(
+            [
+                tf.broadcast_to(
+                    pairs[:, :, tf.newaxis, 0],
+                    shape=[batch_size, self.sequence_length, self.sequence_length],
+                ),  # index for query
+                tf.broadcast_to(
+                    pairs[:, tf.newaxis, :, 0],
+                    shape=[batch_size, self.sequence_length, self.sequence_length],
+                ),
+            ],  # index for key
+            axis=-1,
+        )
+        idx_pairs_r = tf.stack(
+            [
+                tf.broadcast_to(
+                    pairs[:, :, tf.newaxis, 1],
+                    shape=[batch_size, self.sequence_length, self.sequence_length],
+                ),
+                tf.broadcast_to(
+                    pairs[:, tf.newaxis, :, 1],
+                    shape=[batch_size, self.sequence_length, self.sequence_length],
+                ),
+            ],
+            axis=-1,
+        )
 
         """ We compute A2(a, b) = <q_{pi a}, k_{pi b}> + <q_{pi a'}, k_{pi b'}> """
         a2 = tf.matmul(query, tf.transpose(key, perm=[0, 1, 3, 2]))

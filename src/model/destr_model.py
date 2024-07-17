@@ -1,6 +1,7 @@
 import tensorflow as tf
-from tensorflow.keras.layers import LayerNormalization, Conv2D, Dense
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LayerNormalization, Conv2D, Dense  # type: ignore
+from tensorflow.keras.models import Sequential  # type: ignore
+from tensorflow.keras.activations import sigmoid  # type: ignore
 
 from .blocks.encoder_block import EncoderBlock
 from .blocks.mini_detector import MiniDetector
@@ -64,8 +65,8 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
                 EncoderBlock(
                     input_shape=(49, hidden_dim),
                     heads_num=8,
-                    d_k=128,
-                    d_v=256,
+                    d_k=hidden_dim,
+                    d_v=hidden_dim,
                     block_idx=idx,
                 )
                 for idx in range(num_encoder_blocks)
@@ -101,7 +102,7 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
 
         x = tf.reshape(x, shape=(batch_size, 49, self._hidden_dim))
         # generate positional encoding and add to x
-        x += gen_sineembed_for_position(x, d_model=self._hidden_dim)
+        # x += gen_sineembed_for_position(x, d_model=self._hidden_dim)
 
         x = self._encoder_blocks(x)
         encoder_output = x
@@ -128,6 +129,7 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         tf.debugging.check_numerics(x, "NaN detected from MiniDetector.")
 
         for idx in range(self._num_decoders):
+            # TODO pos_transformation, then
             x = self._decoder_blocks[idx](x, encoder_output, top_k_centers, top_k_pos)
 
         cls_x, reg_x = tf.split(x, num_or_size_splits=2, axis=-1)
@@ -135,7 +137,7 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         reg_x = self.layer_norm2(reg_x)
 
         cls_output = self._cls_ffn(cls_x)
-        bbox_output = self._reg_ffn(reg_x)
+        bbox_output = sigmoid(self._reg_ffn(reg_x))
 
         # for top_k objects, we predict they would be the class with their maximum probability
         idx = tf.argmax(

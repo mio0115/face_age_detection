@@ -1,11 +1,10 @@
 import math
 
 import tensorflow as tf
-import numpy as np
 
 
 @tf.function
-def gen_sineembed_for_position(pos_tensor, d_model):
+def gen_sineembed_for_position(pos_tensor, d_model: int = 512):
     """
     Positional embedding of pos_tensor with depth d_model.
 
@@ -31,3 +30,8 @@ def gen_sineembed_for_position(pos_tensor, d_model):
     pos_y = tf.concat([tf.sin(pos_y[..., 0::2]), tf.cos(pos_y[..., 1::2])], axis=-1)
     pos = tf.concat([pos_x, pos_y], axis=2)
     return pos
+
+
+@tf.function
+def with_position_embedding(pos_tensor, d_model: int = 512):
+    return pos_tensor + gen_sineembed_for_position(pos_tensor, d_model)

@@ -28,11 +28,6 @@ if [ $(docker ps -q -f name=$CONTAINER_NAME) ]; then
 fi
 
 # Run the docker container
-docker run -it --rm --name $CONTAINER_NAME -p "$HOST_PORT:$CONTAINER_PORT" --gpus all --cpus="6" --memory="15g" -v $DATA_VOLUME_NAME:/workspace/data -v $MODEL_VOLUME_NAME:/workspace/models "$IMAGE_NAME:$IMAGE_TAG"
-
-#if [ -n "$SSH_USER" ] && [ -n "$SSH_SERVER" ]; then
-#    echo "Setting up SSH tunneling..."
-#    ssh -L $HOST_PORT:localhost:$CONTAINER_PORT $SSH_USER@$SSH_SERVER
-#fi
+docker run -it --rm --name $CONTAINER_NAME --gpus all --cpus="6" --memory="15g" -v $DATA_VOLUME_NAME:/workspace/data -v $MODEL_VOLUME_NAME:/workspace/models "$IMAGE_NAME:$IMAGE_TAG"
 
 echo "Done!"

@@ -1,8 +1,6 @@
 import logging, os
 
-logging.disable(logging.WARNING)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 
 import tensorflow as tf
 import json
@@ -23,21 +21,21 @@ from .validate import validate
 
 
 def train_model(
-    learning_rate,
-    batch_size,
-    num_epochs,
-    num_train_samples,
-    num_valid_samples,
-    shuffle_buffer,
-    to_checkpoint_dir,
-    to_dataset,
-    to_loss_records,
-    num_class,
-    input_shape,
-    load_from_ckpt,
-    num_encoder_blocks,
-    num_decoder_blocks,
-    top_k,
+    learning_rate: float,
+    batch_size: int,
+    num_epochs: int,
+    num_train_samples: int,
+    num_valid_samples: int,
+    shuffle_buffer: int,
+    to_checkpoint_dir: str,
+    to_dataset: str,
+    to_loss_records: str,
+    num_class: int,
+    input_shape: tuple[int],
+    load_from_ckpt: str,
+    num_encoder_blocks: int = 6,
+    num_decoder_blocks: int = 6,
+    top_k: int = 5,
 ):
     model = build_model(
         input_shape=input_shape,
@@ -52,6 +50,7 @@ def train_model(
         checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=3
     )
 
+    load_from_ckpt = False
     if load_from_ckpt:
         status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
 
@@ -300,20 +299,19 @@ def train_one_stepV2(
         grad if grad is not None else tf.zeros_like(var)
         for grad, var in zip(gradients_destr, model.trainable_variables)
     ]
-    clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_destr]
-    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+    # clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_destr]
+    optimizer.apply_gradients(zip(gradients_destr, model.trainable_variables))
 
     # mini_det_vars = model.get_layer(name='obj_det_split_transformer')._mini_detector.trainable_variables
     gradients_mini_det = tape.gradient(mini_det_loss, model.trainable_variables)
-    # tf.print(f"gradients: {gradients_mini_det}")
     gradients_mini_det = [
         grad if grad is not None else tf.zeros_like(var)
         for grad, var in zip(gradients_mini_det, model.trainable_variables)
     ]
-    clipped_gradients = [
-        tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_mini_det
-    ]
-    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
+    # clipped_gradients = [
+    #    tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients_mini_det
+    # ]
+    optimizer.apply_gradients(zip(gradients_mini_det, model.trainable_variables))
 
     return mini_det_loss, model_loss
 
@@ -324,7 +322,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--learning_rate", help="learning rate of optimizer", default=0.0000001
+        "--learning_rate", help="learning rate of optimizer", default=0.000001
     )
     parser.add_argument(
         "-bs", "--batch_size", help="batch size for dataset", default=8, type=int
