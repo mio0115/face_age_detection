@@ -137,11 +137,8 @@ class MiniDetector(tf.keras.layers.Layer):
         cls_output = tf.gather(cls_features, top_k_indices, batch_dims=1)
         reg_output = tf.gather(reg_features, top_k_indices, batch_dims=1)
         top_k_centers = tf.gather(bbox_coord, top_k_indices, batch_dims=1)
-        top_k_pos = gen_sineembed_for_position(
-            pos_tensor=top_k_centers, d_model=2 * self._hidden_dim
-        )
 
         top_k_proposals = tf.concat([cls_output, reg_output], axis=-1)  # 512
         all_proposals = tf.concat([cls_scores, bbox_coord], axis=-1)
 
-        return top_k_proposals, top_k_centers, top_k_pos, all_proposals
+        return top_k_proposals, top_k_centers, all_proposals

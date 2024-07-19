@@ -50,7 +50,7 @@ def train_model(
         checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=3
     )
 
-    load_from_ckpt = False
+    load_from_ckpt = True
     if load_from_ckpt:
         status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
 
@@ -58,8 +58,10 @@ def train_model(
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     optimizers = {
-        "mini_det": tf.keras.optimizers.Adam(learning_rate=learning_rate * 0.1),
-        "model": tf.keras.optimizers.Adam(learning_rate=learning_rate),
+        "mini_det": tf.keras.optimizers.Adam(
+            learning_rate=learning_rate * 0.1, clipvalue=3.0
+        ),
+        "model": tf.keras.optimizers.Adam(learning_rate=learning_rate, clipvalue=3.0),
     }
     # optimizers["mini_det"] = tf.keras.mixed_precision.LossScaleOptimizer(
     #    optimizers["mini_det"]

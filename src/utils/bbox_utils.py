@@ -3,7 +3,6 @@ import math
 import tensorflow as tf
 
 
-@tf.function
 def from_cxcyhw_to_xyxy(bbox_coord: tf.Tensor) -> tf.Tensor:
     """
     Transform the bbox coordinates
@@ -32,7 +31,6 @@ def from_cxcyhw_to_xyxy(bbox_coord: tf.Tensor) -> tf.Tensor:
     return new_bbox_coord
 
 
-@tf.function
 def from_xyxy_to_cxcyhw(bbox_coord: tf.Tensor):
     """
     Transform the bbox coordinates
@@ -60,7 +58,6 @@ def from_xyxy_to_cxcyhw(bbox_coord: tf.Tensor):
     return new_bbox_coord
 
 
-@tf.function
 def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float = 1.0):
     """
     Compute the smooth l1 distance between boundary box and target boundary box.
@@ -88,7 +85,6 @@ def smooth_l1_dist(bbox: tf.Tensor, tgt_bbox: tf.Tensor, delta: float = 1.0):
     return loss
 
 
-@tf.function
 def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
     """
     Compute the Intersection over Union (IoU) between boundary box and target boundary box.
@@ -139,7 +135,6 @@ def get_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor):
     return iou_val
 
 
-@tf.function
 def complete_iou(bbox: tf.Tensor, tgt_bbox: tf.Tensor) -> tf.Tensor:
     """
     Compute the complete iou (CIoU) between boundary box and target boundary box.

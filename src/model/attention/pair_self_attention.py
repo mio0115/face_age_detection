@@ -261,7 +261,6 @@ class PairSelfAttentionV2(tf.keras.layers.Layer):
         return tf.reshape(o2, shape=[batch_size, self.sequence_length, -1])
 
 
-@tf.function
 def _get_pairs(top_k_coord: tf.Tensor):
     """According to DESTR, pair self-attention has better performance than self-attention.
     For each object query, we only take the pair which has the highest IoU.

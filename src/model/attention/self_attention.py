@@ -153,7 +153,10 @@ class SelfAttentionV2(tf.keras.layers.Layer):
         return self._heads_num
 
     def call(self, query: tf.Tensor, key: tf.Tensor, value: tf.Tensor):
-        batch_size = tf.shape(query)[0]
+        if self._heads_num > 1:
+            batch_size = tf.shape(query)[0]
+        else:
+            batch_size = tf.shape(query)[1]
 
         # shape = (batch_size, heads_num, seq_len, seq_len)
         a_sc = tf.matmul(query, tf.transpose(key, perm=[0, 1, 3, 2])) / tf.sqrt(

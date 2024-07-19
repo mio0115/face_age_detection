@@ -43,6 +43,10 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             [Dense(units=256), Dense(units=256), Dense(units=4)],
             name="regression_head_coord",
         )
+        self._pos_scale = Sequential(
+            [Dense(units=256), Dense(units=2)], name="position_scale"
+        )
+
         self.layer_norm1 = LayerNormalization()
         self.layer_norm2 = LayerNormalization()
 
@@ -114,23 +118,48 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         # First of all, we take only the top k proposals from the mini-detector
         # all_proposals is used to train the mini-detector
         # the other three is for the following forwarding
-        top_k_proposals, top_k_centers, top_k_pos, all_proposals = self._mini_detector(
-            x
-        )
+        top_k_proposals, top_k_coords, all_proposals = self._mini_detector(x)
 
         # top_k_proposals: (..., 512), first 256 for cls, last 256 for reg
         top_k_proposals = tf.stop_gradient(top_k_proposals)
         # top_k_centers: (batch_size, top_k, 4), coord of the center points of the k proposals
-        top_k_centers = tf.stop_gradient(top_k_centers)
-        # top_k_pos: (batch_size, top_k, 512), position embedding for the k proposals
-        top_k_pos = tf.stop_gradient(top_k_pos)
+        top_k_coords = tf.stop_gradient(top_k_coords)
+
+        top_k_centers = top_k_coords[..., :2]
+        # inverse function of sigmoid
+        top_k_centers_before_sigmoid = -1 * tf.math.log(tf.pow(top_k_centers, -1) - 1)
+
+        top_k_centers_before_sigmoid = tf.concat(
+            [
+                top_k_centers_before_sigmoid,
+                tf.zeros_like(top_k_centers_before_sigmoid, dtype=tf.float32),
+            ],
+            axis=-1,
+        )
+
+        obj_pos_encoding = gen_sineembed_for_position(top_k_coords, 256)
 
         x = top_k_proposals
         tf.debugging.check_numerics(x, "NaN detected from MiniDetector.")
 
+        top_k_centers = top_k_coords[..., :2]
         for idx in range(self._num_decoders):
-            # TODO pos_transformation, then
-            x = self._decoder_blocks[idx](x, encoder_output, top_k_centers, top_k_pos)
+            obj_pos_trans = self._pos_scale(x[..., 256:])
+            obj_pos_embed = top_k_centers * obj_pos_trans
+
+            tmp_bbox = self._reg_ffn(x[..., 256:])
+            tmp_bbox = tmp_bbox + top_k_centers_before_sigmoid
+            top_k_coords = sigmoid(tmp_bbox)
+
+            # tf.print(f"shape of obj_pos_embed: {tf.shape(obj_pos_embed)}")
+
+            x = self._decoder_blocks[idx](
+                x,
+                encoder_output,
+                obj_coords=top_k_coords,
+                obj_pos_encoding=obj_pos_encoding,
+                obj_sin_embed=obj_pos_embed,
+            )
 
         cls_x, reg_x = tf.split(x, num_or_size_splits=2, axis=-1)
         cls_x = self.layer_norm1(cls_x)

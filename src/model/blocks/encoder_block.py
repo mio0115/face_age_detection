@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization  # type: ignore
 
-from ..attention.self_attention import SelfAttention, SelfAttentionV2
+from ..attention.self_attention import SelfAttentionV2
 from ...utils.positional_encoding import gen_sineembed_for_position
 
 
@@ -20,14 +20,6 @@ class EncoderBlock(tf.keras.layers.Layer):
 
         assert input_shape[-1] % heads_num == 0
 
-        # self.self_attention_layer = SelfAttention(
-        #    heads_num=heads_num,
-        #   input_shape=input_shape,
-        #  output_shape=input_shape,
-        # d_k=d_k,
-        # d_v=d_v,
-        # name=f"encoder_block_{block_idx}_multi-head_self-attention",
-        # )
         self.self_attn_layer = SelfAttentionV2(
             heads_num=heads_num,
             input_shape=input_shape,
@@ -62,7 +54,6 @@ class EncoderBlock(tf.keras.layers.Layer):
     def input_shape(self):
         return self._input_shape
 
-    @tf.function
     def _split_heads(self, tensor, batch_size):
         tensor = tf.reshape(
             tensor,

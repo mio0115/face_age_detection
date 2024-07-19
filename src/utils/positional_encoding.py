@@ -3,7 +3,6 @@ import math
 import tensorflow as tf
 
 
-@tf.function
 def gen_sineembed_for_position(pos_tensor, d_model: int = 512):
     """
     Positional embedding of pos_tensor with depth d_model.
@@ -32,6 +31,5 @@ def gen_sineembed_for_position(pos_tensor, d_model: int = 512):
     return pos
 
 
-@tf.function
 def with_position_embedding(pos_tensor, d_model: int = 512):
     return pos_tensor + gen_sineembed_for_position(pos_tensor, d_model)
