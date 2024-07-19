@@ -47,9 +47,6 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             [Dense(units=256), Dense(units=2)], name="position_scale"
         )
 
-        self.layer_norm1 = LayerNormalization()
-        self.layer_norm2 = LayerNormalization()
-
         # Reduce channels from 2048 to 512
         self._reduce_dim = Conv2D(filters=hidden_dim, kernel_size=(1, 1))
         # Mini detector used to output object proposals to following decoders
@@ -142,16 +139,14 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
         x = top_k_proposals
         tf.debugging.check_numerics(x, "NaN detected from MiniDetector.")
 
-        top_k_centers = top_k_coords[..., :2]
         for idx in range(self._num_decoders):
-            obj_pos_trans = self._pos_scale(x[..., 256:])
+            _, reg_x = tf.split(x, num_or_size_splits=2, axis=-1)
+            obj_pos_trans = self._pos_scale(reg_x)
             obj_pos_embed = top_k_centers * obj_pos_trans
 
-            tmp_bbox = self._reg_ffn(x[..., 256:])
+            tmp_bbox = self._reg_ffn(reg_x)
             tmp_bbox = tmp_bbox + top_k_centers_before_sigmoid
             top_k_coords = sigmoid(tmp_bbox)
-
-            # tf.print(f"shape of obj_pos_embed: {tf.shape(obj_pos_embed)}")
 
             x = self._decoder_blocks[idx](
                 x,
@@ -162,11 +157,9 @@ class ObjDetSplitTransformer(tf.keras.layers.Layer):
             )
 
         cls_x, reg_x = tf.split(x, num_or_size_splits=2, axis=-1)
-        cls_x = self.layer_norm1(cls_x)
-        reg_x = self.layer_norm2(reg_x)
 
         cls_output = self._cls_ffn(cls_x)
-        bbox_output = sigmoid(self._reg_ffn(reg_x))
+        bbox_output = sigmoid(self._reg_ffn(reg_x) + top_k_centers_before_sigmoid)
 
         # for top_k objects, we predict they would be the class with their maximum probability
         idx = tf.argmax(
