@@ -426,7 +426,7 @@ if __name__ == "__main__":
         num_train_samples=args.num_train_samples,
         num_valid_samples=args.num_valid_samples,
         shuffle_buffer=args.shuffle_buffer,
-        to_checkpoint_dir=args.path_to_checkpoint,
+        to_checkpoint_dir=args.path_to_checkpoints,
         to_dataset=args.path_to_dataset,
         to_loss_records=args.path_to_loss_records,
         num_class=args.num_cls,
