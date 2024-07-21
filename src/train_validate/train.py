@@ -6,6 +6,7 @@ import tensorflow as tf
 import json
 import gc
 import argparse
+from distutils.util import strtobool
 
 from ..model.destr_model import build_model
 from ..model.loss_functions.class_loss_functions import cls_loss
@@ -50,7 +51,6 @@ def train_model(
         checkpoint=checkpoint, directory=to_checkpoint_dir, max_to_keep=3
     )
 
-    load_from_ckpt = True
     if load_from_ckpt:
         status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
 
@@ -319,60 +319,103 @@ def train_one_stepV2(
 
 
 if __name__ == "__main__":
-    with open("./config.json", "r") as fin:
-        config = json.load(fin)
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--learning_rate", help="learning rate of optimizer", default=0.000001
+        "--learning_rate",
+        dest="learning_rate",
+        help="learning rate of optimizer",
+        default=0.000005,
     )
     parser.add_argument(
-        "-bs", "--batch_size", help="batch size for dataset", default=8, type=int
+        "-bs",
+        "--batch_size",
+        dest="batch_size",
+        help="batch size for dataset",
+        default=8,
+        type=int,
     )
     parser.add_argument(
-        "--num_epochs", help="number of training epochs", default=10, type=int
+        "--num_epochs",
+        dest="num_epochs",
+        help="number of training epochs",
+        default=10,
+        type=int,
     )
     parser.add_argument(
         "--num_train_samples",
+        dest="num_train_samples",
         help="number of training samples in epoch",
         default=20000,
         type=int,
     )
     parser.add_argument(
         "--num_valid_samples",
+        dest="num_valid_samples",
         help="number of validate samples in epoch",
         default=1000,
         type=int,
     )
     parser.add_argument(
-        "--shuffle_buffer", help="dataset shuffle buffer size", default=20000, type=int
+        "--shuffle_buffer",
+        dest="shuffle_buffer",
+        help="dataset shuffle buffer size",
+        default=20000,
+        type=int,
     )
     parser.add_argument(
         "--to_checkpoint",
+        dest="path_to_checkpoints",
         help="path to checkpoint directory",
         default="/workspace/models/checkpoints",
     )
     parser.add_argument(
-        "--to_dataset", help="path to dataset", default="/workspace/data/tfrecords"
+        "--to_dataset",
+        dest="path_to_dataset",
+        help="path to dataset",
+        default="/workspace/data/tfrecords",
     )
     parser.add_argument(
         "--to_loss_records",
+        dest="path_to_loss_records",
         help="path to store loss records",
         default="/workspace/models/loss.txt",
     )
     parser.add_argument(
-        "--restore_from_ckpt", help="restore from latest checkpoints", default=False
-    )
-    parser.add_argument("--num_cls", help="number of class to classify", default=8)
-    parser.add_argument("--input_shape", help="shape of input", default=(224, 224, 3))
-    parser.add_argument(
-        "--num_encoder_blocks", help="number of encoder blocks", default=1, type=int
-    )
-    parser.add_argument(
-        "--num_decoder_blocks", help="number of decoder blocks", default=6, type=int
+        "--restore_from_ckpt",
+        dest="restore_from_ckpt",
+        help="restore from latest checkpoints",
+        default=False,
+        type=lambda x: strtobool(x),
     )
     parser.add_argument(
-        "--top_k", help="k objects took in mini-detector", default=5, type=int
+        "--num_cls", dest="num_cls", help="number of class to classify", default=8
+    )
+    parser.add_argument(
+        "--input_shape",
+        dest="input_shape",
+        help="shape of input",
+        default=(224, 224, 3),
+    )
+    parser.add_argument(
+        "--num_encoder_blocks",
+        dest="num_encoder_blocks",
+        help="number of encoder blocks",
+        default=1,
+        type=int,
+    )
+    parser.add_argument(
+        "--num_decoder_blocks",
+        dest="num_decoder_blocks",
+        help="number of decoder blocks",
+        default=6,
+        type=int,
+    )
+    parser.add_argument(
+        "--top_k",
+        dest="top_k",
+        help="k objects took in mini-detector",
+        default=5,
+        type=int,
     )
 
     args = parser.parse_args()
@@ -383,9 +426,9 @@ if __name__ == "__main__":
         num_train_samples=args.num_train_samples,
         num_valid_samples=args.num_valid_samples,
         shuffle_buffer=args.shuffle_buffer,
-        to_checkpoint_dir=args.to_checkpoint,
-        to_dataset=args.to_dataset,
-        to_loss_records=args.to_loss_records,
+        to_checkpoint_dir=args.path_to_checkpoint,
+        to_dataset=args.path_to_dataset,
+        to_loss_records=args.path_to_loss_records,
         num_class=args.num_cls,
         input_shape=args.input_shape,
         load_from_ckpt=args.restore_from_ckpt,

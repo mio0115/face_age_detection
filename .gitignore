@@ -5,3 +5,7 @@ tf_test.ipynb
 
 # Ignore pycache of all packages
 __pycache__/
+
+notebooks/
+
+*.json
